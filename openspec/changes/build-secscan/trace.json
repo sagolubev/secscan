@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.1",
-  "baselineCommit": "c3878351ce57a586fd5ca11cb4cacc9bb8bf2f61",
+  "targetOutcome": "secscan-ij8.2",
+  "baselineCommit": "34b3118f8a55d4b8c347401364df4ff8c2bba573",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -380,32 +380,59 @@
     {
       "requirement": "Progress presentation",
       "scenario": "Interactive dashboard",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/progress/progress.go",
+        "internal/progress/live.go"
+      ],
+      "tests": [
+        "internal/progress/live_test.go"
+      ]
     },
     {
       "requirement": "Progress presentation",
       "scenario": "Plain progress",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/progress/progress.go",
+        "internal/progress/plain.go"
+      ],
+      "tests": [
+        "internal/progress/plain_test.go"
+      ]
     },
     {
       "requirement": "Progress presentation",
       "scenario": "Color disabled",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/progress/live.go"
+      ],
+      "tests": [
+        "internal/progress/live_test.go"
+      ]
     },
     {
       "requirement": "Progress presentation",
       "scenario": "Progress disabled",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
     },
     {
       "requirement": "Progress presentation",
       "scenario": "Progress mode validation",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
     }
   ],
   "checks": {
@@ -501,7 +528,13 @@
           "internal/tracecheck/evidence.go",
           "internal/tracecheck/git.go",
           "internal/tracecheck/tracecheck.go",
-          "internal/tracecheck/tracecheck_test.go"
+          "internal/tracecheck/tracecheck_test.go",
+          "internal/progress/progress.go",
+          "internal/progress/plain.go",
+          "internal/progress/live.go",
+          "internal/progress/progress_test.go",
+          "internal/progress/plain_test.go",
+          "internal/progress/live_test.go"
         ],
         "requireEmptyStdout": true
       },
