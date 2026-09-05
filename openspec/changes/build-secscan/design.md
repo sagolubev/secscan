@@ -265,12 +265,16 @@ findings — по существующему deterministic ключу.
   - amd64 `1b474bf207905a3cffe4e915fe36895835bc89de2620cb2ffd88ca512d9ea31b`;
   - arm64 `6cccb7466a98608e308204e17b259f4ca3a9028c6eb71e6b07ea21b89026c484`;
 - копирует project-owned offline rules;
-- запускается как non-root из pinned Alpine runtime.
+- не содержит time-varying `RUN` steps в final image и запускается numeric
+  non-root UID/GID `65532:65532` из pinned Alpine runtime.
 
 Первый scan строит image локально при его отсутствии и затем запускает scanner
 по immutable local image ID `sha256:...`. Build требует сеть; сами scans
 работают с `--network none`. Фактический image ID и engine version попадают в
-coverage metadata.
+coverage metadata. Opengrep получает отдельный ephemeral `/tmp` tmpfs 256 MiB
+с `exec,nosuid,nodev`. Nuitka executable требует исполняемый `/tmp` для распаковки
+собственного trusted payload; scanner остаётся non-root, repository и image
+read-only, network выключена, а local builds scanned project не разрешены.
 
 Image содержит LGPL-2.1 license и `THIRD_PARTY_NOTICES` с upstream release URL,
 version, binary hashes и ссылкой на соответствующий source. Opengrep binary не
@@ -284,9 +288,10 @@ License и не встраиваются в продукт автоматиче�
 `scanner/opengrep/rules/LICENSE`; third-party rule code не копируется:
 
 - Python: dynamic `eval`/`exec`, `subprocess` с `shell=True`, unsafe YAML load,
-  weak hash for security-sensitive use;
+  без generic weak-hash rules, которые дают ложные positives на checksums;
 - TypeScript: dynamic `eval`, interpolated `child_process.exec`, unsafe
-  `innerHTML`, weak randomness for secret/token generation.
+  `innerHTML`, disabled TLS verification и weak randomness только для
+  token/secret/key/nonce variables.
 
 Rules проходят positive и negative fixtures. Report записывает rule pack
 SHA-256 и точное rule count. Coverage честно называется `project-default-v1`;

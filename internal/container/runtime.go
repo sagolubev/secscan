@@ -57,3 +57,24 @@ func (runtime Runtime) Run(ctx context.Context, args []string) error {
 	}
 	return nil
 }
+
+func (runtime Runtime) RunDiagnostic(ctx context.Context, args []string) error {
+	command := exec.CommandContext(ctx, runtime.Binary, args...)
+	if output, err := command.CombinedOutput(); err != nil {
+		detail := strings.TrimSpace(string(output))
+		if len(detail) > 2048 {
+			detail = detail[len(detail)-2048:]
+		}
+		return fmt.Errorf("%s command failed: %w: %s", runtime.Binary, err, detail)
+	}
+	return nil
+}
+
+func (runtime Runtime) Output(ctx context.Context, args ...string) ([]byte, error) {
+	command := exec.CommandContext(ctx, runtime.Binary, args...)
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s output failed: %w", runtime.Binary, err)
+	}
+	return output, nil
+}

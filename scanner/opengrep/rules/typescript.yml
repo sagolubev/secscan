@@ -1,0 +1,54 @@
+rules:
+  - id: secscan.typescript.dynamic-eval
+    languages: [typescript]
+    message: Dynamic code execution can run untrusted input.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-95
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: secscan.typescript.child-process-exec
+    languages: [typescript]
+    message: Shell command execution can permit command injection.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-78
+    pattern-either:
+      - pattern: child_process.exec(`...${$EXPR}...`)
+      - pattern: childProcess.exec(`...${$EXPR}...`)
+
+  - id: secscan.typescript.inner-html
+    languages: [typescript]
+    message: Assigning dynamic HTML can create cross-site scripting.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-79
+    pattern: $ELEMENT.innerHTML = $VALUE
+
+  - id: secscan.typescript.insecure-tls
+    languages: [typescript]
+    message: Disabling TLS certificate verification permits interception.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-295
+    pattern: |
+      { ..., rejectUnauthorized: false, ... }
+
+  - id: secscan.typescript.weak-token-randomness
+    languages: [typescript]
+    message: Math.random is not suitable for generating security tokens.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-338
+    patterns:
+      - pattern: const $NAME = Math.random()
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(token|secret|nonce|key).*

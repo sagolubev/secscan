@@ -1,0 +1,31 @@
+rules:
+  - id: secscan.python.dynamic-code-execution
+    languages: [python]
+    message: Dynamic code execution can run untrusted input.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-95
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: secscan.python.subprocess-shell
+    languages: [python]
+    message: Shell-enabled subprocess execution can permit command injection.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-78
+    pattern: $FUNC(..., shell=True, ...)
+
+  - id: secscan.python.unsafe-yaml-load
+    languages: [python]
+    message: Unsafe YAML loading can construct attacker-controlled objects.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: CWE-502
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)

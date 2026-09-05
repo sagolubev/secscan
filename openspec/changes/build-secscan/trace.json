@@ -380,7 +380,7 @@
       ],
       "tests": [
         "internal/opengrep/image_test.go",
-        "scanner/opengrep/rules/test.sh"
+        "scanner/opengrep/test-image.sh"
       ]
     },
     {
@@ -533,7 +533,9 @@
           "internal/progress/progress.go",
           "internal/progress/plain.go",
           "internal/progress/live.go",
-          "internal/progress/progress_test.go"
+          "internal/progress/progress_test.go",
+          "internal/opengrep/image.go",
+          "internal/opengrep/image_test.go"
         ],
         "requireEmptyStdout": true
       },
