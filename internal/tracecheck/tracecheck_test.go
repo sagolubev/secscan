@@ -106,6 +106,15 @@ func TestValidateScopeChecksBothRenamePaths(t *testing.T) {
 	}
 }
 
+func TestValidateScopeAcceptsDirectoryPrefix(t *testing.T) {
+	scope := Scope{Implementation: []string{"cmd/secscan/"}}
+	changes := []Change{{Status: "A", Path: "cmd/secscan/main.go"}}
+
+	if err := ValidateScope(scope, changes); err != nil {
+		t.Fatalf("ValidateScope() error = %v, want nil", err)
+	}
+}
+
 func TestParseChangesPreservesBothRenamePaths(t *testing.T) {
 	got, err := parseChanges([]byte("R100\x00old/name.go\x00internal/name.go\x00M\x00go.mod\x00"))
 	if err != nil {
@@ -182,12 +191,31 @@ func TestRunChecksRejectsUnexpectedStdout(t *testing.T) {
 	}
 }
 
+func TestRunChecksPassesDeclaredEnvironment(t *testing.T) {
+	checks := []Check{{
+		Name: "environment",
+		Argv: []string{os.Args[0], "-test.run=TestHelperProcess", "--", "env"},
+		Env:  []string{"TRACECHECK_TEST_ENV=present"},
+	}}
+
+	results, ok := RunChecks(context.Background(), ".", checks)
+	if !ok || len(results) != 1 || results[0].ExitCode != 0 {
+		t.Fatalf("RunChecks() = %#v, %t; want one passing result", results, ok)
+	}
+}
+
 func TestHelperProcess(t *testing.T) {
 	if len(os.Args) < 2 {
 		return
 	}
 	for i, arg := range os.Args {
 		if arg == "--" && i+1 < len(os.Args) {
+			if os.Args[i+1] == "env" {
+				if os.Getenv("TRACECHECK_TEST_ENV") == "present" {
+					os.Exit(0)
+				}
+				os.Exit(9)
+			}
 			if os.Args[i+1] == "print" {
 				os.Stdout.WriteString("unexpected\n")
 				os.Exit(0)

@@ -76,14 +76,16 @@
       {"name":"tracecheck-tests","argv":["go","test","./internal/tracecheck"]}
     ],
     "target": [
-      {"name":"walking-skeleton-tests","argv":["go","test","./cmd/secscan","./internal/container","./internal/gitleaks","./internal/report"]}
+      {"name":"walking-skeleton-tests","argv":["go","test","./cmd/secscan","./internal/container","./internal/gitleaks","./internal/report"]},
+      {"name":"container-acceptance","argv":["go","test","./cmd/secscan","./internal/gitleaks","-run","TestAcceptance","-count=1"],"env":["SECSCAN_ACCEPTANCE=1"]}
     ],
     "final": [
       {"name":"openspec","argv":["openspec","validate","--all","--strict"]},
       {"name":"staleness","argv":["opsx-stale","check","openspec/changes/build-secscan"]},
       {"name":"format","argv":["gofmt","-d","."],"requireEmptyStdout":true},
       {"name":"vet","argv":["go","vet","./..."]},
-      {"name":"tests","argv":["go","test","./..."]}
+      {"name":"tests","argv":["go","test","./..."]},
+      {"name":"container-acceptance","argv":["go","test","./cmd/secscan","./internal/gitleaks","-run","TestAcceptance","-count=1"],"env":["SECSCAN_ACCEPTANCE=1"]}
     ]
   }
 }

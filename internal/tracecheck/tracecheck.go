@@ -32,6 +32,7 @@ type Scope struct {
 type Check struct {
 	Name               string   `json:"name"`
 	Argv               []string `json:"argv"`
+	Env                []string `json:"env,omitempty"`
 	RequireEmptyStdout bool     `json:"requireEmptyStdout,omitempty"`
 }
 
@@ -162,9 +163,10 @@ func ValidateScope(scope Scope, changes []Change) error {
 
 func inScope(scope Scope, path string) bool {
 	for _, allowed := range append(append(append([]string{}, scope.Implementation...), scope.Governance...), scope.EvidenceSinks...) {
+		prefix := strings.HasSuffix(filepath.ToSlash(allowed), "/")
 		allowed = filepath.ToSlash(filepath.Clean(allowed))
 		path = filepath.ToSlash(filepath.Clean(path))
-		if path == allowed || strings.HasSuffix(allowed, "/") && strings.HasPrefix(path, allowed) {
+		if path == allowed || prefix && strings.HasPrefix(path, allowed+"/") {
 			return true
 		}
 	}

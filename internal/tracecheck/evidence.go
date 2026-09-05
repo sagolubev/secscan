@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"time"
@@ -28,6 +29,7 @@ type Evidence struct {
 type CheckResult struct {
 	Name        string   `json:"name"`
 	Argv        []string `json:"argv"`
+	Env         []string `json:"env,omitempty"`
 	Cwd         string   `json:"cwd"`
 	ExitCode    int      `json:"exitCode"`
 	DurationMS  int64    `json:"durationMs"`
@@ -87,6 +89,7 @@ func RunChecks(ctx context.Context, root string, checks []Check) ([]CheckResult,
 		result := CheckResult{
 			Name: check.Name,
 			Argv: append([]string(nil), check.Argv...),
+			Env:  append([]string(nil), check.Env...),
 			Cwd:  root,
 		}
 		if len(check.Argv) == 0 {
@@ -94,6 +97,7 @@ func RunChecks(ctx context.Context, root string, checks []Check) ([]CheckResult,
 		} else {
 			command := exec.CommandContext(ctx, check.Argv[0], check.Argv[1:]...)
 			command.Dir = root
+			command.Env = append(os.Environ(), check.Env...)
 			var stdout bytes.Buffer
 			command.Stdout = &stdout
 			if err := command.Run(); err != nil {
