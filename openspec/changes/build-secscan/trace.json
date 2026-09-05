@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.2",
-  "baselineCommit": "34b3118f8a55d4b8c347401364df4ff8c2bba573",
+  "targetOutcome": "secscan-ij8.3",
+  "baselineCommit": "0e83cc6b193e4f69dc75bee0973ce4bf7f7f0ce5",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -229,10 +229,13 @@
       "scenario": "Pinned scanner image",
       "disposition": "target",
       "components": [
-        "internal/gitleaks/run.go"
+        "internal/gitleaks/run.go",
+        "scanner/opengrep/Dockerfile",
+        "internal/opengrep/image.go"
       ],
       "tests": [
-        "internal/gitleaks/run_test.go"
+        "internal/gitleaks/run_test.go",
+        "internal/opengrep/image_test.go"
       ]
     },
     {
@@ -368,8 +371,17 @@
     {
       "requirement": "Language SAST",
       "scenario": "Honest rule coverage",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "scanner/opengrep/Dockerfile",
+        "scanner/opengrep/rules/python.yml",
+        "scanner/opengrep/rules/typescript.yml",
+        "internal/opengrep/image.go"
+      ],
+      "tests": [
+        "internal/opengrep/image_test.go",
+        "scanner/opengrep/rules/test.sh"
+      ]
     },
     {
       "requirement": "Language SAST",
@@ -465,28 +477,18 @@
     ],
     "target": [
       {
-        "name": "progress-tests",
+        "name": "opengrep-image-tests",
         "argv": [
           "go",
           "test",
-          "./internal/progress",
-          "./cmd/secscan",
-          "./internal/gitleaks"
+          "./internal/opengrep"
         ]
       },
       {
-        "name": "container-acceptance",
+        "name": "opengrep-image-build",
         "argv": [
-          "go",
-          "test",
-          "./cmd/secscan",
-          "./internal/gitleaks",
-          "-run",
-          "TestAcceptance",
-          "-count=1"
-        ],
-        "env": [
-          "SECSCAN_ACCEPTANCE=1"
+          "sh",
+          "scanner/opengrep/test-image.sh"
         ]
       }
     ],
