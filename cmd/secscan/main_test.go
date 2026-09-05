@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/sigiuscom/secscan/internal/orchestrator"
 	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
 )
@@ -18,7 +20,8 @@ import (
 func TestRunWritesOneJSONDocument(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	scan := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+	scan := func(_ context.Context, _ string, _ []string, emit func(progress.Event)) (report.Report, error) {
+		emit(progress.Event{Scanner: "gitleaks", Stage: progress.StageQueued, Status: progress.StatusQueued})
 		return report.Report{SchemaVersion: "1", Repository: "/repo"}, nil
 	}
 
@@ -35,7 +38,7 @@ func TestRunWritesOneJSONDocument(t *testing.T) {
 }
 
 func TestRunExitCodesAndScannerSelection(t *testing.T) {
-	failed := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+	failed := func(context.Context, string, []string, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("scan failed")
 	}
 	for _, test := range []struct {
@@ -49,7 +52,7 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 		{
 			name: "all selects gitleaks",
 			args: []string{"--scanners", "all"},
-			scan: func(context.Context, string, func(progress.Event)) (report.Report, error) {
+			scan: func(context.Context, string, []string, func(progress.Event)) (report.Report, error) {
 				return report.Report{SchemaVersion: "1"}, nil
 			},
 			want: 0,
@@ -65,7 +68,7 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 }
 
 func TestRunProgressModes(t *testing.T) {
-	success := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+	success := func(context.Context, string, []string, func(progress.Event)) (report.Report, error) {
 		return report.Report{SchemaVersion: "1"}, nil
 	}
 
@@ -82,8 +85,46 @@ func TestRunProgressModes(t *testing.T) {
 	}
 }
 
+func TestParseScannerSelection(t *testing.T) {
+	got, err := parseScannerSelection("typescript-sast,gitleaks,typescript-sast")
+	if err != nil {
+		t.Fatalf("parseScannerSelection() error = %v", err)
+	}
+	want := []string{"typescript-sast", "gitleaks"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseScannerSelection() = %q, want %q", got, want)
+	}
+	if _, err := parseScannerSelection(""); err == nil {
+		t.Fatal("parseScannerSelection(empty) error = nil")
+	}
+}
+
+func TestBuildReportAllowsAllSkipped(t *testing.T) {
+	skipped := []report.Scanner{{
+		Name:   "python-sast",
+		Status: "skipped",
+		Coverage: report.Coverage{
+			Unit: "files",
+		},
+	}}
+
+	got, err := buildReport(
+		"/repo",
+		report.Exclusions{},
+		skipped,
+		orchestrator.Result{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("buildReport() error = %v", err)
+	}
+	if len(got.Scanners) != 1 || got.Scanners[0].Status != "skipped" {
+		t.Errorf("buildReport() = %#v", got)
+	}
+}
+
 func TestRunTTYFallsBackToPlainWhenStderrIsNotTerminal(t *testing.T) {
-	failed := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+	failed := func(context.Context, string, []string, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("scan failed")
 	}
 	var stderr bytes.Buffer
@@ -96,7 +137,7 @@ func TestRunTTYFallsBackToPlainWhenStderrIsNotTerminal(t *testing.T) {
 	if strings.Contains(got, "\x1b[") {
 		t.Fatalf("non-terminal stderr contains ANSI: %q", got)
 	}
-	if !strings.Contains(got, "scanner=gitleaks") || !strings.HasSuffix(got, "scan failed\n") {
+	if !strings.HasSuffix(got, "scan failed\n") {
 		t.Fatalf("plain stderr is incomplete: %q", got)
 	}
 }
@@ -123,13 +164,19 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repository, "canary.txt"), []byte("token="+canary+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(repository, "app.py"), []byte("eval(user_input)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repository, "app.ts"), []byte("eval(userInput);\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if output, err := exec.Command("git", "-C", repository, "init", "--quiet").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, output)
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := run(context.Background(), []string{"--scanners", "gitleaks", repository}, &stdout, &stderr, scan)
+	code := run(context.Background(), []string{"--scanners", "all", repository}, &stdout, &stderr, scan)
 	if code != 0 {
 		t.Fatalf("run() exit = %d, want 0; stderr=%s", code, stderr.String())
 	}
@@ -140,7 +187,7 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) == 0 {
-		t.Fatal("run() report has no findings")
+	if len(got.Findings) < 3 || len(got.Scanners) != 3 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/3", len(got.Findings), len(got.Scanners))
 	}
 }

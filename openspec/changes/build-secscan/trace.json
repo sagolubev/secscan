@@ -20,7 +20,6 @@
       "internal/opengrep/",
       "internal/orchestrator/",
       "scanner/opengrep/",
-      "THIRD_PARTY_NOTICES.md",
       "LICENSES/"
     ],
     "governance": [
@@ -31,7 +30,8 @@
       "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/.stale.json",
       "openspec/changes/build-secscan/proposal.md",
-      "openspec/changes/build-secscan/README.md"
+      "openspec/changes/build-secscan/README.md",
+      "THIRD_PARTY_NOTICES.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -249,7 +249,7 @@
       "disposition": "target",
       "components": [
         "internal/gitleaks/run.go",
-        "scanner/opengrep/Dockerfile",
+        "scanner/opengrep/assets/Dockerfile",
         "internal/opengrep/image.go"
       ],
       "tests": [
@@ -401,11 +401,11 @@
       "disposition": "target",
       "components": [
         "internal/discovery/discovery.go",
-        "internal/orchestrator/orchestrator.go"
+        "cmd/secscan/main.go"
       ],
       "tests": [
         "internal/discovery/discovery_test.go",
-        "internal/orchestrator/orchestrator_test.go"
+        "cmd/secscan/main_test.go"
       ]
     },
     {
@@ -413,9 +413,9 @@
       "scenario": "Honest rule coverage",
       "disposition": "target",
       "components": [
-        "scanner/opengrep/Dockerfile",
-        "scanner/opengrep/rules/python.yml",
-        "scanner/opengrep/rules/typescript.yml",
+        "scanner/opengrep/assets/Dockerfile",
+        "scanner/opengrep/assets/rules/python.yml",
+        "scanner/opengrep/assets/rules/typescript.yml",
         "internal/opengrep/image.go",
         "internal/opengrep/scan.go",
         "internal/report/report.go"
@@ -611,7 +611,8 @@
           "internal/opengrep/scan.go",
           "internal/opengrep/scan_test.go",
           "internal/orchestrator/orchestrator.go",
-          "internal/orchestrator/orchestrator_test.go"
+          "internal/orchestrator/orchestrator_test.go",
+          "scanner/opengrep/assets/assets.go"
         ],
         "requireEmptyStdout": true
       },

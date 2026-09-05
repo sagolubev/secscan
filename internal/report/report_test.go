@@ -40,3 +40,24 @@ func TestMarshalUsesEmptyArrays(t *testing.T) {
 		t.Fatalf("Marshal() emitted null collection: %s", got)
 	}
 }
+
+func TestMarshalSortsScanners(t *testing.T) {
+	input := Report{
+		SchemaVersion: "1",
+		Scanners: []Scanner{
+			{Name: "typescript-sast"},
+			{Name: "gitleaks"},
+			{Name: "python-sast"},
+		},
+	}
+	got, err := Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Index(got, []byte(`"name":"gitleaks"`)) >
+		bytes.Index(got, []byte(`"name":"python-sast"`)) ||
+		bytes.Index(got, []byte(`"name":"python-sast"`)) >
+			bytes.Index(got, []byte(`"name":"typescript-sast"`)) {
+		t.Fatalf("Marshal() scanners are not sorted: %s", got)
+	}
+}
