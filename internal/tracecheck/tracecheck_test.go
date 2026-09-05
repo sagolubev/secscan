@@ -156,6 +156,64 @@ func TestStateIdentityIgnoresEvidenceSinkContent(t *testing.T) {
 	}
 }
 
+func TestStateIdentityIncludesFileMode(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "cmd", "tool")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scope := Scope{Implementation: []string{"cmd/"}}
+	changes := []Change{{Status: "M", Path: "cmd/tool"}}
+	first, err := StateIdentity(root, "abc123", scope, changes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	second, err := StateIdentity(root, "abc123", scope, changes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("StateIdentity() ignored file mode change")
+	}
+}
+
+func TestStateIdentityRejectsSensitiveRenameSource(t *testing.T) {
+	scope := Scope{
+		Governance:    []string{".env", "safe.txt"},
+		EvidenceSinks: []string{".beads/issues.jsonl"},
+	}
+	changes := []Change{{
+		Status:  "R100",
+		OldPath: ".env",
+		Path:    ".beads/issues.jsonl",
+	}}
+
+	if _, err := StateIdentity(t.TempDir(), "abc123", scope, changes); err == nil {
+		t.Fatal("StateIdentity() error = nil, want sensitive old path error")
+	}
+}
+
+func TestAuthorityHashRejectsManifestEpicMismatch(t *testing.T) {
+	root := t.TempDir()
+	link := filepath.Join(root, "openspec", "changes", "build-secscan", ".br-link")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(link, []byte("secscan-real\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := AuthorityHash(root, "secscan-real.1", "secscan-fake", "build-secscan"); err == nil {
+		t.Fatal("AuthorityHash() error = nil, want manifest epic mismatch")
+	}
+}
+
 func TestRunChecksStopsAfterFailure(t *testing.T) {
 	checks := []Check{
 		{Name: "pass", Argv: []string{os.Args[0], "-test.run=TestHelperProcess", "--", "0"}},

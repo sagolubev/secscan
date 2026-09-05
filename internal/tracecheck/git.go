@@ -3,8 +3,11 @@ package tracecheck
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,40 +47,62 @@ func Changes(root, baseline string) ([]Change, error) {
 
 func StateIdentity(root, baseline string, scope Scope, changes []Change) (string, error) {
 	hash := sha256.New()
-	hash.Write([]byte(baseline))
+	writeIdentityRecord(hash, []byte(baseline))
 
 	for _, change := range changes {
-		if inList(scope.EvidenceSinks, change.Path) {
+		for _, path := range []string{change.OldPath, change.Path} {
+			if path != "" && forbiddenContentPath(path) {
+				return "", fmt.Errorf("refuse to hash sensitive path %q", path)
+			}
+		}
+		if inList(scope.EvidenceSinks, change.Path) &&
+			(change.OldPath == "" || inList(scope.EvidenceSinks, change.OldPath)) {
 			continue
 		}
-		if forbiddenContentPath(change.Path) {
-			return "", fmt.Errorf("refuse to hash sensitive path %q", change.Path)
-		}
-		fmt.Fprintf(hash, "\x00%s\x00%s\x00%s", change.Status, change.OldPath, change.Path)
 
 		fullPath := filepath.Join(root, filepath.FromSlash(change.Path))
 		info, err := os.Lstat(fullPath)
 		if os.IsNotExist(err) {
+			record, _ := json.Marshal(struct {
+				Change Change `json:"change"`
+			}{Change: change})
+			writeIdentityRecord(hash, record)
 			continue
 		}
 		if err != nil {
 			return "", fmt.Errorf("inspect %q: %w", change.Path, err)
 		}
+		var content []byte
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(fullPath)
 			if err != nil {
 				return "", fmt.Errorf("read symlink %q: %w", change.Path, err)
 			}
-			hash.Write([]byte(target))
-			continue
+			content = []byte(target)
+		} else {
+			content, err = os.ReadFile(fullPath)
+			if err != nil {
+				return "", fmt.Errorf("read %q: %w", change.Path, err)
+			}
 		}
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			return "", fmt.Errorf("read %q: %w", change.Path, err)
-		}
-		hash.Write(content)
+		contentHash := sha256.Sum256(content)
+		record, _ := json.Marshal(struct {
+			Change Change      `json:"change"`
+			Mode   os.FileMode `json:"mode"`
+			Digest string      `json:"digest"`
+		}{
+			Change: change,
+			Mode:   info.Mode(),
+			Digest: hex.EncodeToString(contentHash[:]),
+		})
+		writeIdentityRecord(hash, record)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func writeIdentityRecord(hash io.Writer, record []byte) {
+	_ = binary.Write(hash, binary.BigEndian, uint64(len(record)))
+	_, _ = hash.Write(record)
 }
 
 func parseChanges(data []byte) ([]Change, error) {

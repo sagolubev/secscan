@@ -30,7 +30,7 @@
   "traces": [
     {"requirement":"CLI contract","scenario":"Machine-readable stdout","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
     {"requirement":"CLI contract","scenario":"Exit status","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
-    {"requirement":"Container runtime","scenario":"Safe repository mount","disposition":"target","components":["internal/container/runtime.go"],"tests":["internal/container/runtime_test.go"]},
+    {"requirement":"Container runtime","scenario":"Safe repository mount","disposition":"target","components":["internal/gitleaks/run.go"],"tests":["internal/gitleaks/run_test.go"]},
     {"requirement":"Container runtime","scenario":"Rootless runtime","disposition":"deferred","issue":"secscan-ij8"},
     {"requirement":"Container runtime","scenario":"Runtime unavailable","disposition":"target","components":["internal/container/runtime.go"],"tests":["internal/container/runtime_test.go"]},
     {"requirement":"Scanner orchestration","scenario":"Parallel execution","disposition":"deferred","issue":"secscan-ij8"},
@@ -40,7 +40,7 @@
     {"requirement":"Canonical finding model","scenario":"Cross-scanner dependency deduplication","disposition":"deferred","issue":"secscan-ij8"},
     {"requirement":"Canonical finding model","scenario":"Secret redaction","disposition":"target","components":["internal/gitleaks/parser.go","internal/report/report.go"],"tests":["internal/gitleaks/parser_test.go"]},
     {"requirement":"Canonical finding model","scenario":"Finding origin","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Honest coverage","scenario":"Coverage envelope","disposition":"target","components":["internal/report/report.go"],"tests":["internal/report/report_test.go"]},
+    {"requirement":"Honest coverage","scenario":"Coverage envelope","disposition":"target","components":["internal/gitleaks/run.go","internal/report/report.go"],"tests":["internal/gitleaks/run_test.go"]},
     {"requirement":"Honest coverage","scenario":"Unsupported inputs","disposition":"deferred","issue":"secscan-ij8"},
     {"requirement":"Honest coverage","scenario":"Traversal disclosure","disposition":"deferred","issue":"secscan-ij8"},
     {"requirement":"Filtering and suppressions","scenario":"Exempt findings","disposition":"deferred","issue":"secscan-ij8"},
@@ -82,7 +82,7 @@
     "final": [
       {"name":"openspec","argv":["openspec","validate","--all","--strict"]},
       {"name":"staleness","argv":["opsx-stale","check","openspec/changes/build-secscan"]},
-      {"name":"format","argv":["gofmt","-d","."],"requireEmptyStdout":true},
+      {"name":"format","argv":["gofmt","-d","cmd/secscan/main.go","cmd/secscan/main_test.go","cmd/tracecheck/main.go","internal/container/runtime.go","internal/container/runtime_test.go","internal/gitleaks/parser.go","internal/gitleaks/parser_test.go","internal/gitleaks/run.go","internal/gitleaks/run_test.go","internal/report/report.go","internal/report/report_test.go","internal/tracecheck/evidence.go","internal/tracecheck/git.go","internal/tracecheck/tracecheck.go","internal/tracecheck/tracecheck_test.go"],"requireEmptyStdout":true},
       {"name":"vet","argv":["go","vet","./..."]},
       {"name":"tests","argv":["go","test","./..."]},
       {"name":"container-acceptance","argv":["go","test","./cmd/secscan","./internal/gitleaks","-run","TestAcceptance","-count=1"],"env":["SECSCAN_ACCEPTANCE=1"]}

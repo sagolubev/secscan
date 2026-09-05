@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -50,7 +52,16 @@ type dependency struct {
 	Type string `json:"dependency_type"`
 }
 
-func AuthorityHash(root, outcome, epic string) (string, error) {
+func AuthorityHash(root, outcome, epic, change string) (string, error) {
+	link, err := os.ReadFile(filepath.Join(root, "openspec", "changes", change, ".br-link"))
+	if err != nil {
+		return "", fmt.Errorf("read OpenSpec Beads link: %w", err)
+	}
+	linkedEpic := strings.TrimSpace(string(link))
+	if linkedEpic != epic {
+		return "", fmt.Errorf("manifest epic %q does not match .br-link %q", epic, linkedEpic)
+	}
+
 	command := exec.Command(
 		"br", "show", outcome, "--json", "--no-auto-import", "--no-auto-flush",
 	)

@@ -77,7 +77,7 @@ func run() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	authority, err := tracecheck.AuthorityHash(root, manifest.TargetOutcome, manifest.Epic)
+	authority, err := tracecheck.AuthorityHash(root, manifest.TargetOutcome, manifest.Epic, manifest.Change)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
