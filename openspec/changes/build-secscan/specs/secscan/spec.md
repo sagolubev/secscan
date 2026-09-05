@@ -71,7 +71,10 @@
 #### Scenario: Secret redaction
 - **WHEN** scanner сообщает secret
 - **THEN** report не содержит secret value или source snippet
-- **AND** finding различает working tree и Git history
+
+#### Scenario: Finding origin
+- **WHEN** scanner сообщает finding из working tree или Git history
+- **THEN** finding явно указывает соответствующий origin
 
 ### Requirement: Honest coverage
 
@@ -221,3 +224,28 @@
 - **WHEN** host platform или scanner architecture не поддерживается
 - **THEN** affected scanner помечается failed или skipped с точной причиной
 - **AND** остальные scanners продолжают работу.
+
+### Requirement: Development traceability
+
+Репозиторий SHALL поддерживать машинно-проверяемые связи между OpenSpec
+requirements, реализующими components и подтверждающими tests без создания
+второго task tracker или копии текста требований.
+
+#### Scenario: Trace links
+- **WHEN** trace verifier проверяет change
+- **THEN** каждый scenario из delta spec либо связан с target component и test paths, либо явно deferred со ссылкой на Beads issue
+- **AND** component и test paths существуют для завершённого target
+
+#### Scenario: Phased evidence
+- **WHEN** выполняется `baseline`, `target` или `final` verification
+- **THEN** evidence содержит phase, авторитетный baseline commit, точный ID дочернего Beads outcome, результаты всех phase checks с argv, cwd, exit code и duration, identity проверенного implementation scope и canonical authority hash outcome
+- **AND** verifier подтверждает принадлежность outcome к epic из `.br-link`
+- **AND** изменение implementation scope после проверки делает предыдущее evidence несвежим
+- **AND** изменение title, description, acceptance criteria или dependencies связанной Beads-задачи делает предыдущее evidence несвежим
+- **AND** последующая запись evidence, timestamp или lifecycle status в Beads не изменяет canonical authority hash
+
+#### Scenario: Scope verification
+- **WHEN** verifier сравнивает baseline commit с текущим committed и working-tree состоянием
+- **THEN** каждый добавленный, изменённый, удалённый или переименованный файл входит в declared implementation scope, governance scope или evidence sinks
+- **AND** для переименования scope проверяет исходный и целевой paths
+- **AND** выход за scope завершает проверку ошибкой с перечислением путей
