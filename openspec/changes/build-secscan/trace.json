@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.3",
-  "baselineCommit": "0e83cc6b193e4f69dc75bee0973ce4bf7f7f0ce5",
+  "targetOutcome": "secscan-ij8.4",
+  "baselineCommit": "0127a65b5cf56381414804ef95255eccf6f8cff9",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -91,24 +91,37 @@
     {
       "requirement": "Scanner orchestration",
       "scenario": "Parallel execution",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/orchestrator/orchestrator.go"
+      ],
+      "tests": [
+        "internal/orchestrator/orchestrator_test.go"
+      ]
     },
     {
       "requirement": "Scanner orchestration",
       "scenario": "Partial failure",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/orchestrator/orchestrator.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/orchestrator/orchestrator_test.go"
+      ]
     },
     {
       "requirement": "Scanner orchestration",
       "scenario": "Scanner selection",
       "disposition": "target",
       "components": [
-        "cmd/secscan/main.go"
+        "cmd/secscan/main.go",
+        "internal/orchestrator/orchestrator.go"
       ],
       "tests": [
-        "cmd/secscan/main_test.go"
+        "cmd/secscan/main_test.go",
+        "internal/orchestrator/orchestrator_test.go"
       ]
     },
     {
@@ -167,8 +180,14 @@
     {
       "requirement": "Honest coverage",
       "scenario": "Traversal disclosure",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go"
+      ]
     },
     {
       "requirement": "Filtering and suppressions",
@@ -353,20 +372,41 @@
     {
       "requirement": "Language SAST",
       "scenario": "Python files",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/opengrep/scan.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go",
+        "internal/opengrep/scan_test.go"
+      ]
     },
     {
       "requirement": "Language SAST",
       "scenario": "TypeScript files",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/opengrep/scan.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go",
+        "internal/opengrep/scan_test.go"
+      ]
     },
     {
       "requirement": "Language SAST",
       "scenario": "No matching files",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/orchestrator/orchestrator.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go",
+        "internal/orchestrator/orchestrator_test.go"
+      ]
     },
     {
       "requirement": "Language SAST",
@@ -376,18 +416,27 @@
         "scanner/opengrep/Dockerfile",
         "scanner/opengrep/rules/python.yml",
         "scanner/opengrep/rules/typescript.yml",
-        "internal/opengrep/image.go"
+        "internal/opengrep/image.go",
+        "internal/opengrep/scan.go",
+        "internal/report/report.go"
       ],
       "tests": [
         "internal/opengrep/image_test.go",
+        "internal/opengrep/scan_test.go",
         "scanner/opengrep/test-image.sh"
       ]
     },
     {
       "requirement": "Language SAST",
       "scenario": "Scanner output isolation",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/opengrep/parser.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/opengrep/parser_test.go"
+      ]
     },
     {
       "requirement": "Progress presentation",
@@ -477,18 +526,37 @@
     ],
     "target": [
       {
-        "name": "opengrep-image-tests",
+        "name": "language-sast-tests",
         "argv": [
           "go",
           "test",
-          "./internal/opengrep"
+          "./internal/discovery",
+          "./internal/opengrep",
+          "./internal/orchestrator",
+          "./internal/report",
+          "./cmd/secscan"
         ]
       },
       {
-        "name": "opengrep-image-build",
+        "name": "opengrep-image",
         "argv": [
           "sh",
           "scanner/opengrep/test-image.sh"
+        ]
+      },
+      {
+        "name": "language-acceptance",
+        "argv": [
+          "go",
+          "test",
+          "./cmd/secscan",
+          "./internal/opengrep",
+          "-run",
+          "TestAcceptance",
+          "-count=1"
+        ],
+        "env": [
+          "SECSCAN_ACCEPTANCE=1"
         ]
       }
     ],
@@ -535,7 +603,15 @@
           "internal/progress/live.go",
           "internal/progress/progress_test.go",
           "internal/opengrep/image.go",
-          "internal/opengrep/image_test.go"
+          "internal/opengrep/image_test.go",
+          "internal/discovery/discovery.go",
+          "internal/discovery/discovery_test.go",
+          "internal/opengrep/parser.go",
+          "internal/opengrep/parser_test.go",
+          "internal/opengrep/scan.go",
+          "internal/opengrep/scan_test.go",
+          "internal/orchestrator/orchestrator.go",
+          "internal/orchestrator/orchestrator_test.go"
         ],
         "requireEmptyStdout": true
       },
@@ -562,6 +638,7 @@
           "test",
           "./cmd/secscan",
           "./internal/gitleaks",
+          "./internal/opengrep",
           "-run",
           "TestAcceptance",
           "-count=1"
