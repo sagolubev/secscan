@@ -6,19 +6,21 @@
 
 - Создать новый Go CLI `secscan` для Linux и macOS.
 - Поддержать Docker и Podman, rootless-режим, read-only mount репозитория, ограничение привилегий и контролируемый network access.
-- Реализовать 16 scanner personas: Gitleaks, Trivy, Grype, Semgrep, Checkov, Checkov Terraform, OSV-Scanner, Zizmor, Bearer, cppcheck, Gradle Catalog, Gradle Scripts, refreshVersions, KICS, Poutine и OCI Images.
+- Реализовать scanner personas Gitleaks, Python SAST, TypeScript SAST, Semgrep, Trivy, Grype, Checkov, Checkov Terraform, OSV-Scanner, Zizmor, Bearer, cppcheck, Gradle Catalog, Gradle Scripts, refreshVersions, KICS, Poutine и OCI Images.
 - Нормализовать scanner outputs в собственную versioned schema v1 с детерминированными fingerprint, ordering и deduplication.
 - Реализовать coverage accounting, scanner failures, skipped inputs, unread manifests, unchecked languages, ignored и untracked directories.
 - Реализовать severity/test-data filters, project suppressions, native scanner waivers, baselines, scoped scans и token budget.
 - Генерировать minified JSON, offline HTML и SARIF 2.1.0 из одной канонической модели.
 - Добавить opt-in LLM brief/explain с обязательным удалением secrets и изоляцией от инструкций сканируемого репозитория.
 - Поддержать headless CI execution без изменения exit code из-за самих findings.
+- Показывать интерактивный scanner dashboard в TTY и стабильные progress events в CI.
 
 ## Capabilities
 
 ### New Capabilities
 
 - `scanner-orchestration`: безопасный параллельный запуск scanner containers.
+- `progress-reporting`: интерактивный TTY dashboard и plain CI events.
 - `finding-normalization`: единая модель findings, locations, advisories и coverage.
 - `report-filtering`: suppressions, waivers, baselines, scopes и budget accounting.
 - `report-rendering`: JSON v1, HTML и SARIF.

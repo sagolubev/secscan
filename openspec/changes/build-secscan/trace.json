@@ -13,7 +13,15 @@
       "internal/container/",
       "internal/gitleaks/",
       "internal/report/",
-      "testdata/"
+      "testdata/",
+      "go.sum",
+      "internal/progress/",
+      "internal/discovery/",
+      "internal/opengrep/",
+      "internal/orchestrator/",
+      "scanner/opengrep/",
+      "THIRD_PARTY_NOTICES.md",
+      "LICENSES/"
     ],
     "governance": [
       "cmd/tracecheck/",
@@ -21,71 +29,513 @@
       "openspec/changes/build-secscan/design.md",
       "openspec/changes/build-secscan/specs/secscan/spec.md",
       "openspec/changes/build-secscan/trace.json",
-      "openspec/changes/build-secscan/.stale.json"
+      "openspec/changes/build-secscan/.stale.json",
+      "openspec/changes/build-secscan/proposal.md",
+      "openspec/changes/build-secscan/README.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
     ]
   },
   "traces": [
-    {"requirement":"CLI contract","scenario":"Machine-readable stdout","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
-    {"requirement":"CLI contract","scenario":"Exit status","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
-    {"requirement":"Container runtime","scenario":"Safe repository mount","disposition":"target","components":["internal/gitleaks/run.go"],"tests":["internal/gitleaks/run_test.go"]},
-    {"requirement":"Container runtime","scenario":"Rootless runtime","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Container runtime","scenario":"Runtime unavailable","disposition":"target","components":["internal/container/runtime.go"],"tests":["internal/container/runtime_test.go"]},
-    {"requirement":"Scanner orchestration","scenario":"Parallel execution","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Scanner orchestration","scenario":"Partial failure","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Scanner orchestration","scenario":"Scanner selection","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
-    {"requirement":"Canonical finding model","scenario":"Deterministic result","disposition":"target","components":["internal/report/report.go"],"tests":["internal/report/report_test.go"]},
-    {"requirement":"Canonical finding model","scenario":"Cross-scanner dependency deduplication","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Canonical finding model","scenario":"Secret redaction","disposition":"target","components":["internal/gitleaks/parser.go","internal/report/report.go"],"tests":["internal/gitleaks/parser_test.go"]},
-    {"requirement":"Canonical finding model","scenario":"Finding origin","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Honest coverage","scenario":"Coverage envelope","disposition":"target","components":["internal/gitleaks/run.go","internal/report/report.go"],"tests":["internal/gitleaks/run_test.go"]},
-    {"requirement":"Honest coverage","scenario":"Unsupported inputs","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Honest coverage","scenario":"Traversal disclosure","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Filtering and suppressions","scenario":"Exempt findings","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Filtering and suppressions","scenario":"Strict project configuration","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Filtering and suppressions","scenario":"Suppression accounting","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Baselines","scenario":"New finding","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Baselines","scenario":"Expanded finding","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Baselines","scenario":"Incompatible baseline","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Scoped scans","scenario":"Narrowed scanner","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Scoped scans","scenario":"Whole-repository scanner","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Scoped scans","scenario":"Scope and baseline conflict","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Reproducibility","scenario":"Pinned scanner image","disposition":"target","components":["internal/gitleaks/run.go"],"tests":["internal/gitleaks/run_test.go"]},
-    {"requirement":"Reproducibility","scenario":"Cached rules","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Reproducibility","scenario":"Pinned feeds","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"OCI image scanning","scenario":"Explicit consent","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"OCI image scanning","scenario":"Image ownership","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Report rendering","scenario":"HTML safety","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Report rendering","scenario":"SARIF completeness","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Report rendering","scenario":"Token budget","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"LLM analysis","scenario":"Untrusted repository","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"LLM analysis","scenario":"Credential isolation","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"LLM analysis","scenario":"LLM failure","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Supported environments","scenario":"CI execution","disposition":"target","components":["cmd/secscan/main.go"],"tests":["cmd/secscan/main_test.go"]},
-    {"requirement":"Supported environments","scenario":"Unsupported host","disposition":"deferred","issue":"secscan-ij8"},
-    {"requirement":"Development traceability","scenario":"Trace links","disposition":"target","components":["cmd/tracecheck/main.go","internal/tracecheck/tracecheck.go"],"tests":["internal/tracecheck/tracecheck_test.go"]},
-    {"requirement":"Development traceability","scenario":"Phased evidence","disposition":"target","components":["cmd/tracecheck/main.go","internal/tracecheck/evidence.go"],"tests":["internal/tracecheck/tracecheck_test.go"]},
-    {"requirement":"Development traceability","scenario":"Scope verification","disposition":"target","components":["internal/tracecheck/git.go"],"tests":["internal/tracecheck/tracecheck_test.go"]}
+    {
+      "requirement": "CLI contract",
+      "scenario": "Machine-readable stdout",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
+    },
+    {
+      "requirement": "CLI contract",
+      "scenario": "Exit status",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Safe repository mount",
+      "disposition": "target",
+      "components": [
+        "internal/gitleaks/run.go"
+      ],
+      "tests": [
+        "internal/gitleaks/run_test.go"
+      ]
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Rootless runtime",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Runtime unavailable",
+      "disposition": "target",
+      "components": [
+        "internal/container/runtime.go"
+      ],
+      "tests": [
+        "internal/container/runtime_test.go"
+      ]
+    },
+    {
+      "requirement": "Scanner orchestration",
+      "scenario": "Parallel execution",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Scanner orchestration",
+      "scenario": "Partial failure",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Scanner orchestration",
+      "scenario": "Scanner selection",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Canonical finding model",
+      "scenario": "Deterministic result",
+      "disposition": "target",
+      "components": [
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/report/report_test.go"
+      ]
+    },
+    {
+      "requirement": "Canonical finding model",
+      "scenario": "Cross-scanner dependency deduplication",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Canonical finding model",
+      "scenario": "Secret redaction",
+      "disposition": "target",
+      "components": [
+        "internal/gitleaks/parser.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/gitleaks/parser_test.go"
+      ]
+    },
+    {
+      "requirement": "Canonical finding model",
+      "scenario": "Finding origin",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Honest coverage",
+      "scenario": "Coverage envelope",
+      "disposition": "target",
+      "components": [
+        "internal/gitleaks/run.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/gitleaks/run_test.go"
+      ]
+    },
+    {
+      "requirement": "Honest coverage",
+      "scenario": "Unsupported inputs",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Honest coverage",
+      "scenario": "Traversal disclosure",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Filtering and suppressions",
+      "scenario": "Exempt findings",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Filtering and suppressions",
+      "scenario": "Strict project configuration",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Filtering and suppressions",
+      "scenario": "Suppression accounting",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "New finding",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "Expanded finding",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "Incompatible baseline",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Scoped scans",
+      "scenario": "Narrowed scanner",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Scoped scans",
+      "scenario": "Whole-repository scanner",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Scoped scans",
+      "scenario": "Scope and baseline conflict",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Pinned scanner image",
+      "disposition": "target",
+      "components": [
+        "internal/gitleaks/run.go"
+      ],
+      "tests": [
+        "internal/gitleaks/run_test.go"
+      ]
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Cached rules",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Pinned feeds",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "OCI image scanning",
+      "scenario": "Explicit consent",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "OCI image scanning",
+      "scenario": "Image ownership",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "HTML safety",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "SARIF completeness",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "Token budget",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "LLM analysis",
+      "scenario": "Untrusted repository",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "LLM analysis",
+      "scenario": "Credential isolation",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "LLM analysis",
+      "scenario": "LLM failure",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Supported environments",
+      "scenario": "CI execution",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Supported environments",
+      "scenario": "Unsupported host",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Trace links",
+      "disposition": "target",
+      "components": [
+        "cmd/tracecheck/main.go",
+        "internal/tracecheck/tracecheck.go"
+      ],
+      "tests": [
+        "internal/tracecheck/tracecheck_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Phased evidence",
+      "disposition": "target",
+      "components": [
+        "cmd/tracecheck/main.go",
+        "internal/tracecheck/evidence.go"
+      ],
+      "tests": [
+        "internal/tracecheck/tracecheck_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Scope verification",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/git.go"
+      ],
+      "tests": [
+        "internal/tracecheck/tracecheck_test.go"
+      ]
+    },
+    {
+      "requirement": "Language SAST",
+      "scenario": "Python files",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Language SAST",
+      "scenario": "TypeScript files",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Language SAST",
+      "scenario": "No matching files",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Language SAST",
+      "scenario": "Honest rule coverage",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Language SAST",
+      "scenario": "Scanner output isolation",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Interactive dashboard",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Plain progress",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Color disabled",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Progress disabled",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Progress mode validation",
+      "disposition": "deferred",
+      "issue": "secscan-ij8"
+    }
   ],
   "checks": {
     "baseline": [
-      {"name":"openspec","argv":["openspec","validate","--all","--strict"]},
-      {"name":"staleness","argv":["opsx-stale","check","openspec/changes/build-secscan"]},
-      {"name":"tracecheck-tests","argv":["go","test","./internal/tracecheck"]}
+      {
+        "name": "openspec",
+        "argv": [
+          "openspec",
+          "validate",
+          "--all",
+          "--strict"
+        ]
+      },
+      {
+        "name": "staleness",
+        "argv": [
+          "opsx-stale",
+          "check",
+          "openspec/changes/build-secscan"
+        ]
+      },
+      {
+        "name": "tracecheck-tests",
+        "argv": [
+          "go",
+          "test",
+          "./internal/tracecheck"
+        ]
+      }
     ],
     "target": [
-      {"name":"walking-skeleton-tests","argv":["go","test","./cmd/secscan","./internal/container","./internal/gitleaks","./internal/report"]},
-      {"name":"container-acceptance","argv":["go","test","./cmd/secscan","./internal/gitleaks","-run","TestAcceptance","-count=1"],"env":["SECSCAN_ACCEPTANCE=1"]}
+      {
+        "name": "walking-skeleton-tests",
+        "argv": [
+          "go",
+          "test",
+          "./cmd/secscan",
+          "./internal/container",
+          "./internal/gitleaks",
+          "./internal/report"
+        ]
+      },
+      {
+        "name": "container-acceptance",
+        "argv": [
+          "go",
+          "test",
+          "./cmd/secscan",
+          "./internal/gitleaks",
+          "-run",
+          "TestAcceptance",
+          "-count=1"
+        ],
+        "env": [
+          "SECSCAN_ACCEPTANCE=1"
+        ]
+      }
     ],
     "final": [
-      {"name":"openspec","argv":["openspec","validate","--all","--strict"]},
-      {"name":"staleness","argv":["opsx-stale","check","openspec/changes/build-secscan"]},
-      {"name":"format","argv":["gofmt","-d","cmd/secscan/main.go","cmd/secscan/main_test.go","cmd/tracecheck/main.go","internal/container/runtime.go","internal/container/runtime_test.go","internal/gitleaks/parser.go","internal/gitleaks/parser_test.go","internal/gitleaks/run.go","internal/gitleaks/run_test.go","internal/report/report.go","internal/report/report_test.go","internal/tracecheck/evidence.go","internal/tracecheck/git.go","internal/tracecheck/tracecheck.go","internal/tracecheck/tracecheck_test.go"],"requireEmptyStdout":true},
-      {"name":"vet","argv":["go","vet","./..."]},
-      {"name":"tests","argv":["go","test","./..."]},
-      {"name":"container-acceptance","argv":["go","test","./cmd/secscan","./internal/gitleaks","-run","TestAcceptance","-count=1"],"env":["SECSCAN_ACCEPTANCE=1"]}
+      {
+        "name": "openspec",
+        "argv": [
+          "openspec",
+          "validate",
+          "--all",
+          "--strict"
+        ]
+      },
+      {
+        "name": "staleness",
+        "argv": [
+          "opsx-stale",
+          "check",
+          "openspec/changes/build-secscan"
+        ]
+      },
+      {
+        "name": "format",
+        "argv": [
+          "gofmt",
+          "-d",
+          "cmd/secscan/main.go",
+          "cmd/secscan/main_test.go",
+          "cmd/tracecheck/main.go",
+          "internal/container/runtime.go",
+          "internal/container/runtime_test.go",
+          "internal/gitleaks/parser.go",
+          "internal/gitleaks/parser_test.go",
+          "internal/gitleaks/run.go",
+          "internal/gitleaks/run_test.go",
+          "internal/report/report.go",
+          "internal/report/report_test.go",
+          "internal/tracecheck/evidence.go",
+          "internal/tracecheck/git.go",
+          "internal/tracecheck/tracecheck.go",
+          "internal/tracecheck/tracecheck_test.go"
+        ],
+        "requireEmptyStdout": true
+      },
+      {
+        "name": "vet",
+        "argv": [
+          "go",
+          "vet",
+          "./..."
+        ]
+      },
+      {
+        "name": "tests",
+        "argv": [
+          "go",
+          "test",
+          "./..."
+        ]
+      },
+      {
+        "name": "container-acceptance",
+        "argv": [
+          "go",
+          "test",
+          "./cmd/secscan",
+          "./internal/gitleaks",
+          "-run",
+          "TestAcceptance",
+          "-count=1"
+        ],
+        "env": [
+          "SECSCAN_ACCEPTANCE=1"
+        ]
+      }
     ]
   }
 }

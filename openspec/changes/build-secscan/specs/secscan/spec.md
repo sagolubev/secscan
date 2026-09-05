@@ -39,7 +39,11 @@
 
 ### Requirement: Scanner orchestration
 
-Система SHALL поддерживать personas `gitleaks`, `trivy`, `grype`, `semgrep`, `checkov`, `checkov-terraform`, `osv-scanner`, `zizmor`, `bearer`, `cppcheck`, `gradle-catalog`, `gradle-scripts`, `refresh-versions`, `kics`, `poutine` и `oci-images`.
+Система SHALL поддерживать personas `gitleaks`, `python-sast`,
+`typescript-sast`, `semgrep`, `trivy`, `grype`, `checkov`,
+`checkov-terraform`, `osv-scanner`, `zizmor`, `bearer`, `cppcheck`,
+`gradle-catalog`, `gradle-scripts`, `refresh-versions`, `kics`, `poutine` и
+`oci-images`.
 
 #### Scenario: Parallel execution
 - **WHEN** несколько применимых scanners выбраны
@@ -55,6 +59,65 @@
 - **WHEN** пользователь передаёт `--scanners`
 - **THEN** запускаются только перечисленные personas
 - **AND** `--scanners all` не включает `oci-images` без отдельного `--scan-images`
+
+### Requirement: Language SAST
+
+Система SHALL запускать отдельные `python-sast` и `typescript-sast` jobs через
+один pinned Opengrep engine и project-owned offline rule pack.
+
+#### Scenario: Python files
+- **WHEN** Git worktree содержит tracked или untracked nonignored файлы `.py` или `.pyi`
+- **THEN** `python-sast` сканирует только эти файлы Python rule pack
+- **AND** findings получают language `python` и source scanner `opengrep`
+
+#### Scenario: TypeScript files
+- **WHEN** Git worktree содержит tracked или untracked nonignored файлы `.ts`, `.tsx`, `.mts` или `.cts`
+- **THEN** `typescript-sast` сканирует только эти файлы TypeScript rule pack
+- **AND** findings получают language `typescript` и source scanner `opengrep`
+
+#### Scenario: No matching files
+- **WHEN** для language job нет подходящих tracked или untracked nonignored files
+- **THEN** scanner получает status `skipped`
+- **AND** coverage сообщает `read=0`, `failed=0`, `unit=files`
+
+#### Scenario: Honest rule coverage
+- **WHEN** language SAST завершается
+- **THEN** report содержит engine version, immutable engine image ID, rule pack digest и фактическое rule count
+- **AND** report не заявляет анализ классов уязвимостей, отсутствующих в project-owned rules
+
+#### Scenario: Scanner output isolation
+- **WHEN** Opengrep возвращает finding
+- **THEN** canonical report содержит только allowlisted rule, severity, language и location fields
+- **AND** source snippets, metavariable values и scanner diagnostics не попадают в JSON, progress или error messages
+
+### Requirement: Progress presentation
+
+Система SHALL показывать scanner progress в stderr без изменения JSON stdout.
+
+#### Scenario: Interactive dashboard
+- **WHEN** stderr является TTY, `TERM` не равен `dumb` и progress mode равен `auto` или `tty`
+- **THEN** secscan перерисовывает фиксированный dashboard со строкой на каждый scanner
+- **AND** строка показывает текущую stage, elapsed-time bar, findings count и итоговый status
+- **AND** завершение или ошибка восстанавливают cursor и оставляют финальный dashboard видимым
+
+#### Scenario: Plain progress
+- **WHEN** stderr не является TTY, `TERM=dumb` или progress mode равен `plain`
+- **THEN** secscan выводит стабильные построчные events без ANSI animation
+- **AND** каждое событие содержит scanner, stage и elapsed duration
+
+#### Scenario: Color disabled
+- **WHEN** `NO_COLOR` задан
+- **THEN** выбранный dashboard или plain mode сохраняется
+- **AND** ANSI color sequences не выводятся
+
+#### Scenario: Progress disabled
+- **WHEN** progress mode равен `off`
+- **THEN** scanner progress не выводится
+- **AND** diagnostics ошибок по-прежнему направляются в stderr
+
+#### Scenario: Progress mode validation
+- **WHEN** пользователь передаёт неизвестное значение `--progress`
+- **THEN** команда завершается с usage exit code `2`
 
 ### Requirement: Canonical finding model
 
