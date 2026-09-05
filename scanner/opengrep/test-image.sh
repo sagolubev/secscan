@@ -4,6 +4,7 @@ set -eu
 runtime="${CONTAINER_RUNTIME:-docker}"
 tag="${SECSCAN_OPENGREP_IMAGE:-secscan-opengrep:1.29.0-rules-6389f1f651ce}"
 root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+source_assets="$root/scanner/opengrep/assets"
 output_base="${XDG_CACHE_HOME:-$HOME/.cache}/secscan"
 assets="$output_base/opengrep/1.29.0"
 mkdir -p "$output_base"
@@ -44,8 +45,8 @@ prepare_rootfs() {
     mkdir -p "$work/usr/local/bin" "$work/etc" "$work/rules"
     cp "$assets/opengrep-$architecture" "$work/usr/local/bin/opengrep"
     cp "$assets/OPENGREP-LICENSE" "$work/etc/OPENGREP-LGPL-2.1.txt"
-    cp "$root/THIRD_PARTY_NOTICES.md" "$work/etc/SECSCAN-THIRD-PARTY-NOTICES.md"
-    cp "$root/scanner/opengrep/rules/"* "$work/rules/"
+    cp "$source_assets/THIRD_PARTY_NOTICES.md" "$work/etc/SECSCAN-THIRD-PARTY-NOTICES.md"
+    cp "$source_assets/rules/"* "$work/rules/"
     chmod 0555 "$work/usr/local/bin/opengrep"
     chmod 0444 "$work/etc/"* "$work/rules/"*
     find "$work" -exec touch -t 202608281731.57 {} +
@@ -62,8 +63,8 @@ prepare_rootfs arm64
     --build-arg SOURCE_DATE_EPOCH=1787938317 \
     --build-context "opengrep-assets=$assets" \
     --tag "$tag" \
-    --file "$root/scanner/opengrep/Dockerfile" \
-    "$root"
+    --file "$source_assets/Dockerfile" \
+    "$source_assets"
 "$runtime" run --rm --network none "$tag" --version | grep -F "1.29.0"
 test "$("$runtime" image inspect --format '{{.Config.User}}' "$tag")" = "65532:65532"
 test "$("$runtime" image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$tag")" = "1.29.0"

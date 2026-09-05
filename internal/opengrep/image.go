@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,15 +17,17 @@ import (
 	"time"
 
 	"github.com/sigiuscom/secscan/internal/container"
+	scannerassets "github.com/sigiuscom/secscan/scanner/opengrep/assets"
 )
 
 const (
 	ImageTag       = "secscan-opengrep:1.29.0-rules-6389f1f651ce"
 	EngineVersion  = "1.29.0"
 	RulePackDigest = "6389f1f651ceaa52527e17a7ed0675f2c0b2c1933ede4f3e80ac167b886851e8"
+	RuleCount      = 8
 )
 
-var assets = []struct {
+var upstreamAssets = []struct {
 	Name   string
 	URL    string
 	SHA256 string
@@ -52,12 +55,17 @@ type ImageMetadata struct {
 	RuleDigest    string
 }
 
+type imageRuntime interface {
+	Output(context.Context, ...string) ([]byte, error)
+	RunDiagnostic(context.Context, []string) error
+}
+
 type RuleMetadata struct {
 	Digest    string
 	RuleCount int
 }
 
-func BuildArgs(root, assetsDir string) []string {
+func BuildArgs(assetsDir string) []string {
 	return []string{
 		"build",
 		"--pull=false",
@@ -65,28 +73,24 @@ func BuildArgs(root, assetsDir string) []string {
 		"--build-arg", "SOURCE_DATE_EPOCH=1787938317",
 		"--build-context", "opengrep-assets=" + assetsDir,
 		"--tag", ImageTag,
-		"--file", filepath.Join(root, "scanner", "opengrep", "Dockerfile"),
-		root,
+		"--file", filepath.Join(assetsDir, "Dockerfile"),
+		assetsDir,
 	}
 }
 
-func EnsureImage(ctx context.Context, runtime container.Runtime, root string) (string, error) {
-	output, err := runtime.Output(ctx, InspectArgs()...)
-	if err == nil {
-		metadata, parseErr := ParseImageMetadata(output)
-		if parseErr == nil && metadata.EngineVersion == EngineVersion &&
-			metadata.RuleDigest == RulePackDigest {
-			return metadata.ID, nil
-		}
-	}
-	assetsDir, err := EnsureAssets(ctx, root)
+func EnsureImage(ctx context.Context, runtime container.Runtime) (string, error) {
+	assetsDir, err := EnsureAssets(ctx)
 	if err != nil {
 		return "", err
 	}
-	if err := runtime.RunDiagnostic(ctx, BuildArgs(root, assetsDir)); err != nil {
+	return ensureImage(ctx, runtime, assetsDir)
+}
+
+func ensureImage(ctx context.Context, runtime imageRuntime, assetsDir string) (string, error) {
+	if err := runtime.RunDiagnostic(ctx, BuildArgs(assetsDir)); err != nil {
 		return "", fmt.Errorf("build Opengrep image: %w", err)
 	}
-	output, err = runtime.Output(ctx, InspectArgs()...)
+	output, err := runtime.Output(ctx, InspectArgs()...)
 	if err != nil {
 		return "", fmt.Errorf("inspect Opengrep image: %w", err)
 	}
@@ -100,7 +104,7 @@ func EnsureImage(ctx context.Context, runtime container.Runtime, root string) (s
 	return metadata.ID, nil
 }
 
-func EnsureAssets(ctx context.Context, root string) (string, error) {
+func EnsureAssets(ctx context.Context) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user cache: %w", err)
@@ -109,7 +113,7 @@ func EnsureAssets(ctx context.Context, root string) (string, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create Opengrep asset cache: %w", err)
 	}
-	for _, asset := range assets {
+	for _, asset := range upstreamAssets {
 		path := filepath.Join(directory, asset.Name)
 		if verifyAsset(path, asset.SHA256) == nil {
 			continue
@@ -118,14 +122,25 @@ func EnsureAssets(ctx context.Context, root string) (string, error) {
 			return "", fmt.Errorf("prepare %s: %w", asset.Name, err)
 		}
 	}
-	if err := prepareRootFS(directory, root); err != nil {
+	if err := prepareBuildContext(directory); err != nil {
 		return "", err
 	}
 	return directory, nil
 }
 
-func prepareRootFS(directory, root string) error {
+func prepareBuildContext(directory string) error {
 	epoch := time.Unix(1787938317, 0)
+	dockerfile, err := scannerassets.Files.ReadFile("Dockerfile")
+	if err != nil {
+		return fmt.Errorf("read embedded Dockerfile: %w", err)
+	}
+	if err := copyBytes(dockerfile, filepath.Join(directory, "Dockerfile"), 0o444, epoch); err != nil {
+		return err
+	}
+	notice, err := scannerassets.Files.ReadFile("THIRD_PARTY_NOTICES.md")
+	if err != nil {
+		return fmt.Errorf("read embedded notices: %w", err)
+	}
 	for _, architecture := range []string{"amd64", "arm64"} {
 		target := filepath.Join(directory, "rootfs-"+architecture)
 		if err := os.RemoveAll(target); err != nil {
@@ -138,26 +153,28 @@ func prepareRootFS(directory, root string) error {
 		}{
 			{filepath.Join(directory, "opengrep-"+architecture), "usr/local/bin/opengrep", 0o555},
 			{filepath.Join(directory, "OPENGREP-LICENSE"), "etc/OPENGREP-LGPL-2.1.txt", 0o444},
-			{filepath.Join(root, "THIRD_PARTY_NOTICES.md"), "etc/SECSCAN-THIRD-PARTY-NOTICES.md", 0o444},
 		}
 		for _, file := range files {
 			if err := copyAsset(file.source, filepath.Join(target, file.target), file.mode, epoch); err != nil {
 				return err
 			}
 		}
-		rulesRoot := filepath.Join(root, "scanner", "opengrep", "rules")
-		if err := filepath.WalkDir(rulesRoot, func(path string, entry os.DirEntry, err error) error {
+		if err := copyBytes(notice, filepath.Join(target, "etc", "SECSCAN-THIRD-PARTY-NOTICES.md"), 0o444, epoch); err != nil {
+			return err
+		}
+		if err := fs.WalkDir(scannerassets.Files, "rules", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if entry.IsDir() {
 				return nil
 			}
-			relative, err := filepath.Rel(rulesRoot, path)
+			content, err := scannerassets.Files.ReadFile(path)
 			if err != nil {
 				return err
 			}
-			return copyAsset(path, filepath.Join(target, "rules", relative), 0o444, epoch)
+			relative := strings.TrimPrefix(path, "rules/")
+			return copyBytes(content, filepath.Join(target, "rules", relative), 0o444, epoch)
 		}); err != nil {
 			return fmt.Errorf("prepare rules rootfs: %w", err)
 		}
@@ -166,6 +183,32 @@ func prepareRootFS(directory, root string) error {
 		}
 	}
 	return nil
+}
+
+func copyBytes(content []byte, target string, mode os.FileMode, modified time.Time) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create asset directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(target), ".asset-*")
+	if err != nil {
+		return fmt.Errorf("create temporary asset %q: %w", target, err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.Write(content); err != nil {
+		temporary.Close()
+		return fmt.Errorf("write asset %q: %w", target, err)
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(temporaryPath, mode); err != nil {
+		return err
+	}
+	if err := os.Chtimes(temporaryPath, modified, modified); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, target)
 }
 
 func copyAsset(source, target string, mode os.FileMode, modified time.Time) error {

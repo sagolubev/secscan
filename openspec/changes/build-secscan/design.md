@@ -256,8 +256,9 @@ findings — по существующему deterministic ключу.
 
 ### 11. Project-owned Opengrep image
 
-У Opengrep нет подтверждённого официального container image. Репозиторий
-содержит multi-stage `scanner/opengrep/Dockerfile`, который:
+У Opengrep нет подтверждённого официального container image. Бинарник
+встраивает `scanner/opengrep/assets`, материализует build context в cache и
+собирает image по embedded Dockerfile, который:
 
 - использует `alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce`;
 - скачивает официальные `v1.29.0` musllinux binaries;
@@ -285,7 +286,7 @@ version, binary hashes и ссылкой на соответствующий sou
 Broad Opengrep/Semgrep rule repositories имеют Commons Clause или Semgrep Rules
 License и не встраиваются в продукт автоматически. V1 содержит только
 оригинальный project-authored high-signal набор под отдельной MIT-лицензией в
-`scanner/opengrep/rules/LICENSE`; third-party rule code не копируется:
+`scanner/opengrep/assets/rules/LICENSE`; third-party rule code не копируется:
 
 - Python: dynamic `eval`/`exec`, `subprocess` с `shell=True`, unsafe YAML load,
   без generic weak-hash rules, которые дают ложные positives на checksums;

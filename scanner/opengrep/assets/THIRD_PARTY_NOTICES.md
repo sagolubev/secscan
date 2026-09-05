@@ -18,5 +18,5 @@ Verified release assets:
 - `opengrep_musllinux_aarch64`:
   `sha256:6cccb7466a98608e308204e17b259f4ca3a9028c6eb71e6b07ea21b89026c484`
 
-The rules under `scanner/opengrep/rules` are original secscan project files
-licensed separately under the MIT License in that directory.
+The rules under `scanner/opengrep/assets/rules` are original secscan project
+files licensed separately under the MIT License in that directory.
