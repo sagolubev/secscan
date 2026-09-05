@@ -386,7 +386,7 @@
         "internal/progress/live.go"
       ],
       "tests": [
-        "internal/progress/live_test.go"
+        "internal/progress/progress_test.go"
       ]
     },
     {
@@ -398,7 +398,7 @@
         "internal/progress/plain.go"
       ],
       "tests": [
-        "internal/progress/plain_test.go"
+        "internal/progress/progress_test.go"
       ]
     },
     {
@@ -409,7 +409,7 @@
         "internal/progress/live.go"
       ],
       "tests": [
-        "internal/progress/live_test.go"
+        "internal/progress/progress_test.go"
       ]
     },
     {
@@ -465,14 +465,13 @@
     ],
     "target": [
       {
-        "name": "walking-skeleton-tests",
+        "name": "progress-tests",
         "argv": [
           "go",
           "test",
+          "./internal/progress",
           "./cmd/secscan",
-          "./internal/container",
-          "./internal/gitleaks",
-          "./internal/report"
+          "./internal/gitleaks"
         ]
       },
       {
@@ -532,9 +531,7 @@
           "internal/progress/progress.go",
           "internal/progress/plain.go",
           "internal/progress/live.go",
-          "internal/progress/progress_test.go",
-          "internal/progress/plain_test.go",
-          "internal/progress/live_test.go"
+          "internal/progress/progress_test.go"
         ],
         "requireEmptyStdout": true
       },
