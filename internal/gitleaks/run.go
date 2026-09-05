@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/sigiuscom/secscan/internal/container"
+	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
 )
 
@@ -31,25 +32,45 @@ func ContainerArgs(repository, output string) []string {
 	}
 }
 
-func Scan(ctx context.Context, runtime container.Runtime, repository string) (report.Report, error) {
+func Scan(
+	ctx context.Context,
+	runtime container.Runtime,
+	repository string,
+	emit func(progress.Event),
+) (report.Report, error) {
 	output, err := createReportDir(os.UserCacheDir)
 	if err != nil {
 		return report.Report{}, fmt.Errorf("create report directory: %w", err)
 	}
 	defer os.RemoveAll(output)
 
+	emit(progress.Event{
+		Scanner: "gitleaks",
+		Stage:   progress.StageScanning,
+		Status:  progress.StatusRunning,
+	})
 	if err := runtime.Run(ctx, ContainerArgs(repository, output)); err != nil {
 		return report.Report{}, err
 	}
+	emit(progress.Event{
+		Scanner: "gitleaks",
+		Stage:   progress.StageReading,
+		Status:  progress.StatusRunning,
+	})
 	data, err := os.ReadFile(filepath.Join(output, "gitleaks.json"))
 	if err != nil {
 		return report.Report{}, fmt.Errorf("read Gitleaks report: %w", err)
 	}
+	emit(progress.Event{
+		Scanner: "gitleaks",
+		Stage:   progress.StageNormalizing,
+		Status:  progress.StatusRunning,
+	})
 	findings, err := Parse(data)
 	if err != nil {
 		return report.Report{}, err
 	}
-	return report.Report{
+	result := report.Report{
 		SchemaVersion: "1",
 		Repository:    repository,
 		Scanners: []report.Scanner{{
@@ -63,7 +84,15 @@ func Scan(ctx context.Context, runtime container.Runtime, repository string) (re
 			},
 		}},
 		Findings: findings,
-	}, nil
+	}
+	emit(progress.Event{
+		Scanner:  "gitleaks",
+		Stage:    progress.StageDone,
+		Status:   progress.StatusSuccess,
+		Files:    1,
+		Findings: len(findings),
+	})
+	return result, nil
 }
 
 func createReportDir(userCacheDir func() (string, error)) (string, error) {

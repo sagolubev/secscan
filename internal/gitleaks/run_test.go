@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sigiuscom/secscan/internal/container"
+	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
 )
 
@@ -57,7 +58,7 @@ func TestAcceptanceContainerScanRedactsSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := Scan(context.Background(), runtime, repository)
+	got, err := Scan(context.Background(), runtime, repository, func(progress.Event) {})
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}

@@ -11,13 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
 )
 
 func TestRunWritesOneJSONDocument(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	scan := func(context.Context, string) (report.Report, error) {
+	scan := func(context.Context, string, func(progress.Event)) (report.Report, error) {
 		return report.Report{SchemaVersion: "1", Repository: "/repo"}, nil
 	}
 
@@ -28,13 +29,13 @@ func TestRunWritesOneJSONDocument(t *testing.T) {
 	if got := bytes.Count(stdout.Bytes(), []byte("\n")); got != 1 {
 		t.Errorf("run() stdout newlines = %d, want 1; stdout=%q", got, stdout.String())
 	}
-	if stderr.String() != "scanner=gitleaks status=starting\n" {
-		t.Errorf("run() stderr = %q, want one progress line", stderr.String())
+	if !strings.Contains(stderr.String(), "scanner=gitleaks stage=queued") {
+		t.Errorf("run() stderr = %q, want queued progress", stderr.String())
 	}
 }
 
 func TestRunExitCodesAndScannerSelection(t *testing.T) {
-	failed := func(context.Context, string) (report.Report, error) {
+	failed := func(context.Context, string, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("scan failed")
 	}
 	for _, test := range []struct {
@@ -48,7 +49,7 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 		{
 			name: "all selects gitleaks",
 			args: []string{"--scanners", "all"},
-			scan: func(context.Context, string) (report.Report, error) {
+			scan: func(context.Context, string, func(progress.Event)) (report.Report, error) {
 				return report.Report{SchemaVersion: "1"}, nil
 			},
 			want: 0,
@@ -60,6 +61,43 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 				t.Errorf("run() exit = %d, want %d", code, test.want)
 			}
 		})
+	}
+}
+
+func TestRunProgressModes(t *testing.T) {
+	success := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+		return report.Report{SchemaVersion: "1"}, nil
+	}
+
+	var off bytes.Buffer
+	if code := run(context.Background(), []string{"--progress", "off"}, &bytes.Buffer{}, &off, success); code != 0 {
+		t.Fatalf("run(--progress off) exit = %d, want 0", code)
+	}
+	if off.Len() != 0 {
+		t.Errorf("run(--progress off) stderr = %q, want empty", off.String())
+	}
+
+	if code := run(context.Background(), []string{"--progress", "spinner"}, &bytes.Buffer{}, &bytes.Buffer{}, success); code != 2 {
+		t.Errorf("run(invalid progress) exit = %d, want 2", code)
+	}
+}
+
+func TestRunTTYFallsBackToPlainWhenStderrIsNotTerminal(t *testing.T) {
+	failed := func(context.Context, string, func(progress.Event)) (report.Report, error) {
+		return report.Report{}, errors.New("scan failed")
+	}
+	var stderr bytes.Buffer
+
+	code := run(context.Background(), []string{"--progress", "tty"}, &bytes.Buffer{}, &stderr, failed)
+	if code != 1 {
+		t.Fatalf("run() exit = %d, want 1", code)
+	}
+	got := stderr.String()
+	if strings.Contains(got, "\x1b[") {
+		t.Fatalf("non-terminal stderr contains ANSI: %q", got)
+	}
+	if !strings.Contains(got, "scanner=gitleaks") || !strings.HasSuffix(got, "scan failed\n") {
+		t.Fatalf("plain stderr is incomplete: %q", got)
 	}
 }
 
