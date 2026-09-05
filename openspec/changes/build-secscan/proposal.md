@@ -1,0 +1,47 @@
+## Why
+
+Нужен самостоятельный локальный AppSec-инструмент с полностью контролируемым исходным кодом orchestration, нормализации и отчётности. Он должен запускать существующие open-source scanners в изолированных контейнерах, объединять их несовместимые результаты и явно сообщать не только находки, но и пробелы покрытия.
+
+## What Changes
+
+- Создать новый Go CLI `secscan` для Linux и macOS.
+- Поддержать Docker и Podman, rootless-режим, read-only mount репозитория, ограничение привилегий и контролируемый network access.
+- Реализовать 16 scanner personas: Gitleaks, Trivy, Grype, Semgrep, Checkov, Checkov Terraform, OSV-Scanner, Zizmor, Bearer, cppcheck, Gradle Catalog, Gradle Scripts, refreshVersions, KICS, Poutine и OCI Images.
+- Нормализовать scanner outputs в собственную versioned schema v1 с детерминированными fingerprint, ordering и deduplication.
+- Реализовать coverage accounting, scanner failures, skipped inputs, unread manifests, unchecked languages, ignored и untracked directories.
+- Реализовать severity/test-data filters, project suppressions, native scanner waivers, baselines, scoped scans и token budget.
+- Генерировать minified JSON, offline HTML и SARIF 2.1.0 из одной канонической модели.
+- Добавить opt-in LLM brief/explain с обязательным удалением secrets и изоляцией от инструкций сканируемого репозитория.
+- Поддержать headless CI execution без изменения exit code из-за самих findings.
+
+## Capabilities
+
+### New Capabilities
+
+- `scanner-orchestration`: безопасный параллельный запуск scanner containers.
+- `finding-normalization`: единая модель findings, locations, advisories и coverage.
+- `report-filtering`: suppressions, waivers, baselines, scopes и budget accounting.
+- `report-rendering`: JSON v1, HTML и SARIF.
+- `llm-analysis`: opt-in brief и per-finding explanation.
+- `reproducible-scans`: digest-pinned images, cached rules и pinned advisory feeds.
+
+### Modified Capabilities
+
+- Нет: проект создаётся с нуля.
+
+## Impact
+
+- Требуется установленный Docker или Podman daemon.
+- Первичная загрузка scanner images и advisory databases потребует сеть и несколько гигабайт cache.
+- Проект не обещает совместимость с DietSec Schema 4, fingerprints или baselines.
+- Scanner engines остаются отдельными third-party projects; secscan хранит собственный orchestration и adapter code.
+- Hosted/managed service не входит в первую версию из-за иной threat model и ограничений лицензий third-party rule corpora.
+
+## Workflow Profile
+
+- Profile: feature
+- Artifact depth: Standard
+- Verification depth: Comprehensive
+- Walking skeleton: Required
+- Skeleton rationale: первый вертикальный результат должен доказать безопасный container execution, parsing, normalization и JSON contract до расширения на остальные adapters.
+- Human approval: Yes

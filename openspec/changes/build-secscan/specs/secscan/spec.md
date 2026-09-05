@@ -1,0 +1,223 @@
+## ADDED Requirements
+
+### Requirement: CLI contract
+
+Система SHALL предоставлять команду `secscan [flags] [path]`, где `path` по умолчанию равен текущему каталогу и разрешается в корень содержащего его Git worktree.
+
+#### Scenario: Machine-readable stdout
+- **WHEN** пользователь запускает scan без файлового output override
+- **THEN** stdout содержит ровно один JSON-документ schema v1
+- **AND** progress и diagnostics направляются только в stderr
+
+#### Scenario: Exit status
+- **WHEN** scan завершился и хотя бы один scanner успешно выполнил анализ
+- **THEN** процесс завершается с кодом `0` независимо от количества findings
+- **WHEN** scan не состоялся или все scanners завершились ошибкой
+- **THEN** процесс завершается с кодом `1`
+- **WHEN** аргументы некорректны
+- **THEN** процесс завершается с кодом `2`
+
+### Requirement: Container runtime
+
+Система SHALL запускать scanners через Docker или Podman без установки scanner runtimes на host.
+
+#### Scenario: Safe repository mount
+- **WHEN** scanner запускается
+- **THEN** Git worktree монтируется read-only
+- **AND** container получает `no-new-privileges`
+- **AND** scanner не получает Docker socket
+- **AND** writable cache и temporary directories ограничены отдельными mounts
+
+#### Scenario: Rootless runtime
+- **WHEN** daemon использует user namespace remapping или rootless mode
+- **THEN** созданные cache artifacts остаются доступны текущему host user
+
+#### Scenario: Runtime unavailable
+- **WHEN** ни Docker, ни Podman daemon недоступны
+- **THEN** secscan объясняет, какой runtime был обнаружен и почему соединение не удалось
+- **AND** не создаёт scan report
+
+### Requirement: Scanner orchestration
+
+Система SHALL поддерживать personas `gitleaks`, `trivy`, `grype`, `semgrep`, `checkov`, `checkov-terraform`, `osv-scanner`, `zizmor`, `bearer`, `cppcheck`, `gradle-catalog`, `gradle-scripts`, `refresh-versions`, `kics`, `poutine` и `oci-images`.
+
+#### Scenario: Parallel execution
+- **WHEN** несколько применимых scanners выбраны
+- **THEN** они выполняются параллельно с ограниченной concurrency
+- **AND** timeout и cancellation применяются независимо к каждому scanner
+
+#### Scenario: Partial failure
+- **WHEN** один scanner завершается ошибкой, но другой scanner успешен
+- **THEN** успешные результаты сохраняются
+- **AND** failed scanner присутствует в coverage metadata и error finding
+
+#### Scenario: Scanner selection
+- **WHEN** пользователь передаёт `--scanners`
+- **THEN** запускаются только перечисленные personas
+- **AND** `--scanners all` не включает `oci-images` без отдельного `--scan-images`
+
+### Requirement: Canonical finding model
+
+Система SHALL преобразовывать scanner-specific outputs в versioned schema v1 с kinds `code`, `dependency`, `secret`, `configuration` и `error`.
+
+#### Scenario: Deterministic result
+- **WHEN** одинаковые scanner outputs нормализуются повторно
+- **THEN** JSON bytes, ordering и fingerprints совпадают
+
+#### Scenario: Cross-scanner dependency deduplication
+- **WHEN** Trivy, Grype и OSV сообщают об одной package vulnerability
+- **THEN** report содержит одну finding с объединёнными advisory IDs и списком source scanners
+
+#### Scenario: Secret redaction
+- **WHEN** scanner сообщает secret
+- **THEN** report не содержит secret value или source snippet
+- **AND** finding различает working tree и Git history
+
+### Requirement: Honest coverage
+
+Система SHALL отличать отсутствие findings от отсутствия анализа.
+
+#### Scenario: Coverage envelope
+- **WHEN** scan завершается
+- **THEN** report перечисляет successful, failed и skipped scanners
+- **AND** scanner-specific coverage содержит измеряемые `read`, `failed` и `unit`
+
+#### Scenario: Unsupported inputs
+- **WHEN** repository содержит dependency manifests или source formats без подходящего scanner
+- **THEN** report перечисляет их как unread или unchecked
+
+#### Scenario: Traversal disclosure
+- **WHEN** ignored или untracked directories исключены из обхода
+- **THEN** report сообщает эти exclusions и фактические file/byte counts
+
+### Requirement: Filtering and suppressions
+
+Система SHALL применять исключения в порядке: native scanner waivers, project suppressions, baseline, severity floor, test-data policy.
+
+#### Scenario: Exempt findings
+- **WHEN** finding имеет kind `error` или `secret`
+- **THEN** она не скрывается project suppression, baseline или test-data filter
+
+#### Scenario: Strict project configuration
+- **WHEN** `.secscan.toml` содержит неизвестный key или некорректное правило
+- **THEN** scan завершается configuration error вместо молчаливого игнорирования
+
+#### Scenario: Suppression accounting
+- **WHEN** suppression удаляет finding целиком или частично
+- **THEN** summary считает удалённые findings, places и advisories
+- **AND** один элемент учитывается только первым применившимся механизмом
+
+### Requirement: Baselines
+
+Система SHALL записывать unfiltered normalized findings в versioned baseline и сравнивать последующие runs по stable identity и growth.
+
+#### Scenario: New finding
+- **WHEN** finding отсутствует в baseline
+- **THEN** она присутствует в baseline-filtered report как new
+
+#### Scenario: Expanded finding
+- **WHEN** известная finding появляется в новых locations или получает новые advisories
+- **THEN** report помечает её как expanded
+- **AND** содержит только новый участок
+
+#### Scenario: Incompatible baseline
+- **WHEN** baseline schema или fingerprint algorithm несовместимы
+- **THEN** secscan отказывается сравнивать их без явного migration
+
+### Requirement: Scoped scans
+
+Система SHALL принимать до 16 file или directory scopes и раскрывать, какие scanners сузились, а какие анализировали весь repository.
+
+#### Scenario: Narrowed scanner
+- **WHEN** scanner поддерживает target filtering
+- **THEN** ему передаются только выбранные tracked и untracked files
+
+#### Scenario: Whole-repository scanner
+- **WHEN** scanner не поддерживает безопасный scope
+- **THEN** он анализирует весь repository
+- **AND** report не приписывает его findings выбранному файлу
+
+#### Scenario: Scope and baseline conflict
+- **WHEN** пользователь одновременно запрашивает scoped scan и baseline operation
+- **THEN** CLI отклоняет комбинацию как usage error
+
+### Requirement: Reproducibility
+
+Система SHALL закреплять scanner images по digest и записывать фактические image references и rule/feed state в report.
+
+#### Scenario: Cached rules
+- **WHEN** пользователь выбирает content-addressed cached Semgrep rules
+- **THEN** тот же cache ID обозначает одинаковые canonical rule bytes
+- **AND** scan может использовать их без сети
+
+#### Scenario: Pinned feeds
+- **WHEN** пользователь включает pinned advisory feeds
+- **THEN** Trivy и Grype используют уже загруженные local databases
+- **AND** secscan отказывается выдавать обычный scan при отсутствии требуемой базы
+
+### Requirement: OCI image scanning
+
+Система SHALL обнаруживать literal image references в Dockerfiles, Kubernetes manifests и Compose files, но SHALL загружать их только при `--scan-images`.
+
+#### Scenario: Explicit consent
+- **WHEN** images обнаружены без `--scan-images`
+- **THEN** ни один registry request для них не выполняется
+- **AND** report сообщает количество непросканированных images
+
+#### Scenario: Image ownership
+- **WHEN** secscan загружает отсутствующий image
+- **THEN** image удаляется после run
+- **WHEN** image существовал до run
+- **THEN** secscan его не удаляет
+
+### Requirement: Report rendering
+
+Система SHALL строить JSON v1, offline HTML и SARIF 2.1.0 из одной immutable canonical scan model.
+
+#### Scenario: HTML safety
+- **WHEN** paths, messages или snippets содержат HTML markup
+- **THEN** offline report отображает их как text
+- **AND** не выполняет scripts и не загружает внешние resources
+
+#### Scenario: SARIF completeness
+- **WHEN** пользователь запрашивает SARIF
+- **THEN** SARIF содержит полный unfiltered canonical result set
+- **AND** coverage limitations сохраняются в run properties и notifications
+
+#### Scenario: Token budget
+- **WHEN** JSON превышает `--max-tokens`
+- **THEN** secscan применяет документированный deterministic filter policy
+- **AND** report сообщает итоговый floor и удалённые counts
+- **AND** JSON остаётся структурно полным
+
+### Requirement: LLM analysis
+
+Система SHALL выполнять brief и explain только после явного opt-in и только после сохранения deterministic report.
+
+#### Scenario: Untrusted repository
+- **WHEN** report или source snippets передаются модели
+- **THEN** repository text обрабатывается как untrusted data
+- **AND** project instructions, hooks и tools отключены
+
+#### Scenario: Credential isolation
+- **WHEN** finding имеет kind `secret`
+- **THEN** модели передаются только redacted metadata
+- **AND** source snippet не передаётся
+
+#### Scenario: LLM failure
+- **WHEN** provider недоступен или возвращает invalid output
+- **THEN** основной report сохраняется без изменений
+- **AND** команда явно сообщает об ошибке annotation stage
+
+### Requirement: Supported environments
+
+Система SHALL выпускать standalone binaries для Linux amd64/arm64 и macOS amd64/arm64.
+
+#### Scenario: CI execution
+- **WHEN** stdout не является TTY
+- **THEN** progress выводится построчно в stderr без animation
+
+#### Scenario: Unsupported host
+- **WHEN** host platform или scanner architecture не поддерживается
+- **THEN** affected scanner помечается failed или skipped с точной причиной
+- **AND** остальные scanners продолжают работу.

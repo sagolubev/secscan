@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-05T17:03:24Z",
+  "artifacts": {
+    "proposal.md": {
+      "sha256": "08d1f90a8c67d4687b2d258e0be1e8409c3555fb0397460cb44d623941907572",
+      "synced_at": "2026-09-05T17:03:24Z",
+      "depends_on": []
+    },
+    "specs/secscan/spec.md": {
+      "sha256": "505f2722abc409139780a54be021b31d65647bb8ed87305c4ef0e68671b34421",
+      "synced_at": "2026-09-05T17:03:24Z",
+      "depends_on": [
+        "design.md"
+      ]
+    }
+  }
+}

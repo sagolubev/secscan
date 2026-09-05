@@ -1,0 +1,21 @@
+name: br-flow
+version: 1
+description: OpenSpec artifacts with executable work in Beads
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: High-level description of the change, its motivation, and scope
+    template: proposal.md
+    requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Detailed specifications with requirements and scenarios
+    template: specs/spec.md
+    requires:
+      - proposal
+  - id: design
+    generates: design.md
+    description: Technical design decisions and implementation approach
+    template: design.md
+    requires:
+      - specs
