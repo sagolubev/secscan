@@ -148,6 +148,11 @@
 
 Система SHALL закреплять scanner images по digest и записывать фактические image references и rule/feed state в report.
 
+#### Scenario: Pinned scanner image
+- **WHEN** scanner container запускается
+- **THEN** используется image reference с immutable digest
+- **AND** фактический reference записывается в coverage metadata
+
 #### Scenario: Cached rules
 - **WHEN** пользователь выбирает content-addressed cached Semgrep rules
 - **THEN** тот же cache ID обозначает одинаковые canonical rule bytes
