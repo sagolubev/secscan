@@ -1,103 +1,241 @@
 # Secscan
 
-[MIT](LICENSE) · [Releases](https://github.com/sagolubev/secscan/releases) · [CI](https://github.com/sagolubev/secscan/actions/workflows/ci.yml)
+[Скачать](https://github.com/sagolubev/secscan/releases/latest) · [MIT](LICENSE) · [CI](https://github.com/sagolubev/secscan/actions/workflows/ci.yml)
 
-Go CLI для локального AppSec-анализа Git worktree. Запускает scanners в
-изолированных контейнерах и объединяет результаты в JSON schema v1.
+Secscan запускает проверки безопасности локального Git-репозитория и собирает
+находки в один JSON-отчёт. Он проверяет секреты, код, зависимости, CI и
+инфраструктурные файлы. Во время запуска в терминале виден прогресс каждого сканера.
 
-В [Releases](https://github.com/sagolubev/secscan/releases) доступны четыре
-single-file executables: `secscan-linux-amd64`, `secscan-linux-arm64`,
-`secscan-darwin-amd64`, `secscan-darwin-arm64`. Выберите свой OS/CPU, сверьте
-SHA256 с `SHA256SUMS` и выполните `chmod +x <binary>`. Рядом не нужны config,
-rule packs или shared libraries. Git и container runtime по-прежнему нужны
-для scan; scanner payloads готовятся отдельно командой `update`.
+Для работы нужен один бинарник, Git и запущенный Docker. Поддержка Podman есть
+в коде, но пока не подтверждена acceptance-тестами. Go, Python и Node.js на
+компьютере пользователя не нужны: внешние сканеры работают в контейнерах.
 
-`secscan --version` показывает версию, `secscan --licenses` — лицензию проекта
-и third-party notices. Оба флага работают без репозитория и container runtime.
-MIT распространяется на собственный код; условия внешних engines сохраняются.
+## Установка
 
-Из каталога secscan:
+В [релизе v0.1.0](https://github.com/sagolubev/secscan/releases/tag/v0.1.0)
+выберите файл для своей системы:
+
+| Система | Процессор | Файл |
+|---|---|---|
+| Linux | x86-64 | `secscan-linux-amd64` |
+| Linux | ARM64 | `secscan-linux-arm64` |
+| macOS | Intel | `secscan-darwin-amd64` |
+| macOS | Apple Silicon | `secscan-darwin-arm64` |
+
+Архитектуру показывает `uname -m`: `x86_64` соответствует amd64,
+`arm64` или `aarch64` — arm64.
+
+Скачайте бинарник и контрольные суммы. В примере выбран Mac с Apple Silicon.
+Для другой системы замените значение `asset` по таблице.
 
 ```sh
-go run ./cmd/secscan update /path/to/repository
-go run ./cmd/secscan --progress auto /path/to/repository
+version=v0.1.0
+asset=secscan-darwin-arm64
+release="https://github.com/sagolubev/secscan/releases/download/$version"
+curl -fL "$release/$asset" -o "$asset"
+curl -fL "$release/SHA256SUMS" -o SHA256SUMS
 ```
 
-Для отдельного бинарника: `go build -o /tmp/secscan ./cmd/secscan`.
-Нужен Go 1.24+ и работающий Docker или Podman. Реальные acceptance tests
-выполнены на Docker/Colima arm64; Podman и rootless здесь не проверялись.
+Проверьте SHA256 выбранного файла. На macOS:
 
-`update` загружает закреплённые images, собирает project-owned images и
-атомарно публикует необходимые базы в user cache. Первая подготовка может
-занять несколько минут и несколько GiB. Обычный scan ничего не скачивает;
-отсутствующие, повреждённые или просроченные базы дают failed coverage.
-Advisory snapshots действуют пять суток. Статические rules проверяются по
-version и digest, без этого срока годности.
+```sh
+awk -v file="$asset" '$2 == file' SHA256SUMS | shasum -a 256 -c -
+```
 
-| Область | Personas |
+На Linux:
+
+```sh
+awk -v file="$asset" '$2 == file' SHA256SUMS | sha256sum -c -
+```
+
+После результата `OK` установите файл в пользовательский каталог:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+install -m 755 "$asset" "$HOME/.local/bin/secscan"
+export PATH="$HOME/.local/bin:$PATH"
+secscan --version
+```
+
+Добавьте строку `export PATH=...` в `~/.zshrc` или `~/.bashrc`, чтобы команда
+была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.1.0`.
+
+`secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
+Оба информационных флага работают без Git-репозитория и Docker.
+
+## Первый запуск
+
+Запустите Docker и проверьте соединение командой `docker info`.
+На macOS каталог репозитория и пользовательский кэш должны быть доступны
+виртуальной машине Docker/Colima через общий доступ к файлам.
+Затем подготовьте сканеры для своего репозитория:
+
+```sh
+secscan update /path/to/repository
+secscan /path/to/repository > /tmp/secscan-report.json
+```
+
+Замените `/path/to/repository` своим путём. Без пути secscan использует текущий
+каталог. Путь к подкаталогу также выбирает весь содержащий его Git-репозиторий.
+Все флаги указываются перед путём.
+
+`update` скачивает закреплённые версии движков и базы уязвимостей.
+Первая подготовка может занять несколько минут и несколько гигабайт.
+Файлы хранятся в пользовательском кэше, вне проверяемого репозитория.
+Они не входят в скачанный бинарник.
+
+Обычное сканирование ничего не скачивает. Если база отсутствует, повреждена или
+старше пяти суток, повторите `update`. Этот срок относится к базам уязвимостей.
+Статические правила проверяются по версии и хешу.
+
+Отчёт сохраняйте вне проверяемого репозитория, чтобы сканеры не читали его
+во время записи. Прогресс и ошибки идут в stderr, JSON — в stdout.
+
+## Выбор проверок
+
+По умолчанию запускаются 17 проверок. Проверка образов включается отдельно.
+Сканер без подходящих входных файлов получает статус `skipped`.
+
+| Область | Значения `--scanners` |
 |---|---|
-| Secrets | `gitleaks` |
-| Code | `python-sast`, `typescript-sast`, `semgrep`, `bearer`, `cppcheck` |
-| Dependencies | `trivy`, `grype`, `osv-scanner` |
+| Секреты в рабочем дереве | `gitleaks` |
+| Код | `python-sast`, `typescript-sast`, `semgrep`, `bearer`, `cppcheck` |
+| Зависимости | `trivy`, `grype`, `osv-scanner` |
 | CI | `zizmor`, `poutine` |
-| IaC | `checkov`, `checkov-terraform`, `kics` |
+| Инфраструктура | `checkov`, `checkov-terraform`, `kics` |
 | Gradle | `gradle-catalog`, `gradle-scripts`, `refresh-versions` |
-| Container images | `oci-images` — только с `--scan-images` |
+| Образы контейнеров | `oci-images` |
 
-По умолчанию выбраны все 17 personas без анализа container images.
-Для выбора подмножества: `--scanners python-sast,typescript-sast,trivy`.
-Обнаруженные OCI references без разрешения остаются unchecked.
+Например, только Python и TypeScript:
 
 ```sh
-go run ./cmd/secscan update --scanners oci-images /path/to/repository
-go run ./cmd/secscan --scanners oci-images --scan-images /path/to/repository
+secscan update --scanners python-sast,typescript-sast /path/to/repository
+secscan --scanners python-sast,typescript-sast /path/to/repository > /tmp/secscan-code.json
 ```
 
-`--scan-images` разрешает host runtime загрузить отсутствующие target images
-и экспортировать их в archives. Target images не запускаются; scanners не
-получают runtime socket. Существовавшие images сохраняются, загруженные этим
-run удаляются. Digest, engine/feed metadata и состояние cleanup входят в report.
-
-Progress идёт в stderr: `auto`, `tty`, `plain` или `off`. В TTY видны stages,
-elapsed bars и findings каждого scanner. Журнал сокращается под высоту окна;
-в слишком маленьком окне используется plain progress. `NO_COLOR` отключает цвет.
-Stdout содержит JSON. При ошибке доступный частичный report сохраняется с
-failed statuses; диагностика остаётся в stderr. Exit codes: `0` — успешный
-анализ либо только skipped personas, `1` — ошибка без успешного scanner,
-`2` — неверные аргументы. Сами findings не меняют exit code.
-
-Проверяйте `coverage`, `unreadInputs`, `failedInputs` и `limitations`, а не
-только число findings. Python/TypeScript и Semgrep используют собственные восемь
-MIT rules. Bearer пропускается на ARM64; native amd64 acceptance выполняется в GitHub CI.
-Его SARIF подтверждает только paths с findings: остальные inputs остаются
-unread, пустой неподтверждённый результат даёт failure. Bearer rules и upstream
-images используются через private cache, без redistribution.
-
-Gradle-анализ извлекает только статические coordinates. Wrappers, plugins и
-build scripts не выполняются. Dynamic expressions остаются unread.
-`refresh-versions` читает существующие update hints и не подтверждает текущую
-доступность версий или отсутствие vulnerabilities. GitLab includes также
-остаются unread. OpenTofu suffixes адаптируются только в staged-копии;
-конфликт `.tf`/`.tofu` одного имени даёт ошибку.
-
-OpenSpec хранит требования и design; Beads (`br`) — задачи и evidence.
-`openspec/changes/build-secscan/trace.json` связывает requirements с components
-и tests, проверяет полный diff scope и формирует baseline/target/final evidence.
+Для проверки образов из Dockerfile, Kubernetes и Compose:
 
 ```sh
-gofmt -d .
-go vet ./...
-go test ./...
-SECSCAN_ACCEPTANCE=1 go test ./... -run TestAcceptance -count=1 -timeout=30m
-go run ./cmd/tracecheck --phase final --run
+secscan update --scanners oci-images /path/to/repository
+secscan --scanners oci-images --scan-images /path/to/repository > /tmp/secscan-images.json
 ```
 
-CI проверяет Go 1.24.13 и 1.27.1 на Linux/macOS, formatting/module integrity/vet,
-race tests, Actions syntax и trace/staleness. Container acceptance выполняется
-на Linux amd64/arm64; четыре binaries собираются и запускаются на родных
-OS/architectures. Version tag `vMAJOR.MINOR.PATCH` запускает те же gates, затем
-публикует raw executables и checksums. PR jobs не имеют write permissions.
+`--scan-images` разрешает Docker скачать отсутствующие целевые образы.
+Secscan экспортирует их для Trivy и Grype, но не запускает.
+После проверки он удаляет только образы, которые загрузил сам.
+Уже существовавшие образы сохраняются.
 
-`go run ./cmd/tracecheck --validate-only` проверяет links, scope, authority и
-staleness без запуска phase commands; это validation, не evidence выполнения.
-Результаты и ограничения GRACE-пилота — в [оценке](docs/grace-pilot.md).
+## Как читать результат
+
+При наличии `jq` можно посмотреть статусы сканеров:
+
+```sh
+jq '.scanners[] | {name, status, coverage, limitations}' /tmp/secscan-report.json
+```
+
+И отдельно находки:
+
+```sh
+jq '.findings[] | {kind, severity, ruleId, path, line, sources}' /tmp/secscan-report.json
+```
+
+Отсутствие находок не означает, что все файлы проверены. Смотрите `status`,
+`coverage.read`, `coverage.failed`, `unreadInputs`, `failedInputs` и `limitations`.
+Значения секретов и фрагменты исходного кода в отчёт не попадают.
+
+| Код завершения | Значение |
+|---|---|
+| `0` | Хотя бы один сканер успешен, либо все выбранные проверки пропущены из-за отсутствия подходящих файлов |
+| `1` | Запуск не состоялся или ни один запущенный сканер не завершился успешно |
+| `2` | Неверные аргументы |
+
+Сами находки не меняют код завершения. При частичном сбое отчёт сохраняет
+доступные результаты и статусы ошибок. Ошибка до начала сканирования, например
+недоступный Docker, не создаёт отчёт.
+
+В терминале `--progress auto` показывает таблицу прогресса. Для CI используйте
+`--progress plain`, для отключения прогресса — `--progress off`.
+`NO_COLOR=1` отключает цвет. Полосы показывают прошедшее время, а не процент
+готовности. В маленьком окне вывод переключается на строки событий.
+
+## Что пока ограничено
+
+Python, TypeScript и Semgrep используют один собственный набор из восьми правил.
+Это не полный набор правил Semgrep. Bearer работает только на native amd64.
+Его результат подтверждает чтение лишь файлов с находками. Остальные остаются
+непрочитанными в отчёте. Cppcheck проверяет C/C++ без сборки проекта.
+
+Gradle-проверки читают статические координаты зависимостей, не запускают wrapper
+или build scripts. `refresh-versions` читает существующие подсказки обновлений,
+но не проверяет доступность новых версий. GitLab includes не загружаются.
+Gitleaks проверяет рабочее дерево, а не историю Git.
+
+Пока нет HTML/SARIF-экспорта, baseline-сравнения, пользовательских исключений,
+сканирования выбранных файлов и LLM-анализа. Podman и rootless остаются
+непроверенными режимами. Подробности, оставшиеся требования и сравнение с
+DietSec собраны в [обзоре возможностей](docs/feature-status.md).
+
+## Разработка
+
+Для изменения кода нужен Go 1.24 или новее. Клонируйте репозиторий и выполните
+проверки из его корня:
+
+```sh
+git clone https://github.com/sagolubev/secscan.git
+cd secscan
+go build -o /tmp/secscan-dev ./cmd/secscan
+bash .github/scripts/check.sh
+```
+
+Последняя команда проверяет форматирование, зависимости, `go vet` и тесты с
+race detector. Для реальных контейнерных проверок нужен работающий Docker.
+Сначала скачайте закреплённый образ для runtime-тестов:
+
+```sh
+docker pull ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+SECSCAN_ACCEPTANCE=1 SECSCAN_BEARER_ACCEPTANCE=1 \
+  go test ./... -run TestAcceptance -count=1 -timeout=35m
+```
+
+Bearer acceptance пропускается на arm64. CI выполняет проверки Go на Linux и
+macOS, контейнерные тесты на Linux amd64/arm64 и сборки для всех четырёх платформ.
+Тег `vMAJOR.MINOR.PATCH` публикует бинарники только после успешных проверок.
+
+Требования и сценарии находятся в [OpenSpec](openspec/changes/build-secscan/specs/secscan/spec.md),
+задачи и результаты проверок — в Beads (`br`). Для работы с ними нужны
+[OpenSpec 1.12.0](https://github.com/Fission-AI/OpenSpec) и
+[br 0.2.19](https://github.com/Dicklesworthstone/beads_rust/releases/tag/v0.2.19).
+
+Перед изменением прочитайте [AGENTS.md](AGENTS.md), связанную задачу и design.
+Для нового поведения сначала получите падающий тест, затем внесите изменение.
+До реализации задайте в [trace.json](openspec/changes/build-secscan/trace.json)
+задачу `targetOutcome`, исходный `baselineCommit` и ожидаемые файлы `scope`.
+Поддерживайте ссылки requirement → component → test и проверяйте их:
+
+```sh
+openspec validate --all --strict
+go run ./cmd/tracecheck --validate-only
+br list --all
+```
+
+`--validate-only` проверяет ссылки, scope, состояние требований и задач.
+Он не запускает сценарии и не доказывает выполнение всех требований.
+Поле `target` означает наличие связи с кодом и тестом, `deferred` — отложенный
+сценарий. Независимое review проверяет смысл этих связей.
+
+При наличии `jq` список отложенных сценариев можно получить из manifest:
+
+```sh
+jq -r '.traces[] | select(.disposition == "deferred") |
+  [.requirement, .scenario, .issue] | @tsv' \
+  openspec/changes/build-secscan/trace.json
+```
+
+Команды фаз `baseline`, `target` и `final` заданы в `trace.json`.
+Для полного запуска фаз дополнительно нужны `actionlint` и `opsx-stale` из
+принятого workflow. Evidence хранится в Beads. Перед закрытием задачи
+сопоставьте её требования, фактический diff, результаты тестов и review.
+
+[Оценка пилота GRACE](docs/grace-pilot.md) описывает опыт проекта.
+[Разбор исходного GRACE](docs/grace-integration.md) объясняет, что можно
+автоматизировать вместе с OpenSpec, Beads и TDD.
