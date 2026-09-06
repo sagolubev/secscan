@@ -1,7 +1,20 @@
 # Secscan
 
+[MIT](LICENSE) · [Releases](https://github.com/sagolubev/secscan/releases) · [CI](https://github.com/sagolubev/secscan/actions/workflows/ci.yml)
+
 Go CLI для локального AppSec-анализа Git worktree. Запускает scanners в
 изолированных контейнерах и объединяет результаты в JSON schema v1.
+
+В [Releases](https://github.com/sagolubev/secscan/releases) доступны четыре
+single-file executables: `secscan-linux-amd64`, `secscan-linux-arm64`,
+`secscan-darwin-amd64`, `secscan-darwin-arm64`. Выберите свой OS/CPU, сверьте
+SHA256 с `SHA256SUMS` и выполните `chmod +x <binary>`. Рядом не нужны config,
+rule packs или shared libraries. Git и container runtime по-прежнему нужны
+для scan; scanner payloads готовятся отдельно командой `update`.
+
+`secscan --version` показывает версию, `secscan --licenses` — лицензию проекта
+и third-party notices. Оба флага работают без репозитория и container runtime.
+MIT распространяется на собственный код; условия внешних engines сохраняются.
 
 Из каталога secscan:
 
@@ -78,3 +91,13 @@ go test ./...
 SECSCAN_ACCEPTANCE=1 go test ./... -run TestAcceptance -count=1 -timeout=30m
 go run ./cmd/tracecheck --phase final --run
 ```
+
+CI проверяет Go 1.24.13 и 1.27.1 на Linux/macOS, formatting/module integrity/vet,
+race tests, Actions syntax и trace/staleness. Container acceptance выполняется
+на Linux amd64/arm64; четыре binaries собираются и запускаются на родных
+OS/architectures. Version tag `vMAJOR.MINOR.PATCH` запускает те же gates, затем
+публикует raw executables и checksums. PR jobs не имеют write permissions.
+
+`go run ./cmd/tracecheck --validate-only` проверяет links, scope, authority и
+staleness без запуска phase commands; это validation, не evidence выполнения.
+Результаты и ограничения GRACE-пилота — в [оценке](docs/grace-pilot.md).
