@@ -27,6 +27,17 @@ Tag releases publish only the secscan executables and checksum metadata;
 scanner engines/databases remain explicit runtime downloads. Assess the GRACE
 pilot from repository evidence without claiming unmeasured time savings.
 
+## Trivy export integration
+
+Add `--trivy-reports DIR` for repository dependency reports: CycloneDX 1.6 JSON
+for Dependency-Track 4.12+ and Generic Issues JSON for SonarQube Server 10.3+.
+Use the full package inventory from the existing offline Trivy scan, including
+packages without vulnerabilities. Keep JSON stdout unchanged. Write a new
+output directory outside the scanned worktree; do not upload files or require
+service credentials. Incomplete Trivy extraction must fail the requested export.
+This is one feature outcome with a real Trivy-to-files acceptance seam;
+Standard artifacts and Comprehensive verification remain applicable.
+
 ## Capabilities
 
 ### New Capabilities

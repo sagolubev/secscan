@@ -10,9 +10,9 @@
 - **AND** progress и diagnostics направляются только в stderr
 
 #### Scenario: Exit status
-- **WHEN** scan завершился и хотя бы один scanner успешно выполнил анализ
+- **WHEN** scan завершился, хотя бы один scanner успешно выполнил анализ и все явно запрошенные integration exports выполнены
 - **THEN** процесс завершается с кодом `0` независимо от количества findings
-- **WHEN** scan не состоялся или все scanners завершились ошибкой
+- **WHEN** scan не состоялся, все scanners завершились ошибкой или явно запрошенный integration export не выполнен
 - **THEN** процесс завершается с кодом `1`
 - **WHEN** аргументы некорректны
 - **THEN** процесс завершается с кодом `2`
@@ -495,3 +495,38 @@ GitHub Actions SHALL проверять source changes и публиковать
 - **WHEN** подводятся итоги пилота
 - **THEN** документ перечисляет наблюдаемые гарантии, найденные ограничения и стоимость поддержки
 - **AND** измеренные counts отделены от качественных выводов и отсутствующих измерений
+
+### Requirement: Trivy integration reports
+
+Система SHALL по `--trivy-reports DIR` создавать CycloneDX 1.6 SBOM и SonarQube Server Generic Issues JSON из одного offline Trivy scan зависимостей репозитория.
+
+#### Scenario: Complete package inventory
+- **WHEN** Trivy успешно извлёк все выбранные поддерживаемые dependency inputs
+- **THEN** `trivy.cdx.json` содержит все обнаруженные пакеты, включая пакеты без уязвимостей, с корректными PURL и уникальными bom-ref
+- **AND** известные связи зависимостей ссылаются на существующие компоненты, а отсутствующие связи не выдумываются
+- **AND** SBOM соответствует CycloneDX 1.6 и пригоден для Dependency-Track 4.12+
+
+#### Scenario: SonarQube external issues
+- **WHEN** Trivy сообщил уязвимости в зависимостях репозитория
+- **THEN** `trivy.sonarqube.json` содержит согласованные rules и issues для `sonar.externalIssuesReportPaths` в SonarQube Server 10.3+
+- **AND** primaryLocation указывает проверенный относительный путь к реально выбранному manifest без выдуманного textRange
+- **AND** severity и SECURITY impacts определяются детерминированно, а чистый scan создаёт пустые массивы
+
+#### Scenario: Explicit export failure
+- **WHEN** requested Trivy scan failed, skipped, has unread/failed inputs, or lacks verified package inventory
+- **THEN** процесс возвращает exit code 1, сохраняет доступный canonical JSON stdout и не создаёт экспорт, похожий на полный успешный результат
+- **WHEN** --trivy-reports совмещён с update или выбором scanners без trivy
+- **THEN** CLI возвращает usage exit code 2 до запуска scanners
+
+#### Scenario: Safe output files
+- **WHEN** пользователь запросил экспорт в новый каталог вне Git worktree
+- **THEN** создаются только два оговорённых JSON файла после завершения Trivy
+- **AND** существующий каталог, файл или symlink назначения не перезаписывается
+- **AND** raw scanner text, descriptions, snippets, credentials in URLs и произвольные properties не копируются в экспорт
+- **AND** обычный JSON stdout не включает payload экспортных файлов
+
+#### Scenario: Import documentation
+- **WHEN** пользователь читает инструкции экспорта
+- **THEN** документация указывает версии форматов, загрузку SBOM в Dependency-Track и property импорта SonarQube
+- **AND** поясняет, что Dependency-Track анализирует inventory самостоятельно, а SonarQube импортирует замечания только для проиндексированных файлов
+- **AND** repository dependency export не выдаётся за OCI image SBOM или SARIF экспорт всех scanners

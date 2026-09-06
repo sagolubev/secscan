@@ -3,15 +3,28 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.12",
-  "baselineCommit": "c406ed3a1deaf18259c0053f75a7e8a5eaaa623e",
+  "targetOutcome": "secscan-ij8.14",
+  "baselineCommit": "b88dd708a987db86d4b693295faed53b1bfd5e47",
   "scope": {
-    "implementation": [],
+    "implementation": [
+      "cmd/secscan/main.go",
+      "cmd/secscan/main_test.go",
+      "cmd/secscan/export.go",
+      "cmd/secscan/export_test.go",
+      "internal/scanner/dependencies.go",
+      "internal/scanner/trivy_export.go",
+      "internal/scanner/trivy_export_test.go",
+      "internal/report/report.go",
+      "internal/report/trivy.go"
+    ],
     "governance": [
       "README.md",
-      "docs/grace-integration.md",
-      "docs/feature-status.md",
-      "openspec/changes/build-secscan/trace.json"
+      "docs/trivy-export-formats.md",
+      "openspec/changes/build-secscan/trace.json",
+      "openspec/changes/build-secscan/proposal.md",
+      "openspec/changes/build-secscan/design.md",
+      "openspec/changes/build-secscan/specs/secscan/spec.md",
+      "openspec/changes/build-secscan/.stale.json"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -826,6 +839,71 @@
       "tests": [
         "internal/tracecheck/tracecheck_test.go"
       ]
+    },
+    {
+      "requirement": "Trivy integration reports",
+      "scenario": "Complete package inventory",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/trivy_export.go",
+        "cmd/secscan/export.go"
+      ],
+      "tests": [
+        "internal/scanner/trivy_export_test.go",
+        "cmd/secscan/export_test.go"
+      ]
+    },
+    {
+      "requirement": "Trivy integration reports",
+      "scenario": "SonarQube external issues",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/trivy_export.go",
+        "cmd/secscan/export.go"
+      ],
+      "tests": [
+        "internal/scanner/trivy_export_test.go",
+        "cmd/secscan/export_test.go"
+      ]
+    },
+    {
+      "requirement": "Trivy integration reports",
+      "scenario": "Explicit export failure",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/trivy_export.go",
+        "cmd/secscan/export.go"
+      ],
+      "tests": [
+        "internal/scanner/trivy_export_test.go",
+        "cmd/secscan/export_test.go"
+      ]
+    },
+    {
+      "requirement": "Trivy integration reports",
+      "scenario": "Safe output files",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/trivy_export.go",
+        "cmd/secscan/export.go"
+      ],
+      "tests": [
+        "internal/scanner/trivy_export_test.go",
+        "cmd/secscan/export_test.go"
+      ]
+    },
+    {
+      "requirement": "Trivy integration reports",
+      "scenario": "Import documentation",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/trivy_export.go",
+        "cmd/secscan/export.go"
+      ],
+      "tests": [
+        "internal/scanner/trivy_export_test.go",
+        "cmd/secscan/export_test.go"
+      ]
     }
   ],
   "checks": {
@@ -858,14 +936,13 @@
     ],
     "target": [
       {
-        "name": "publication-focused",
+        "name": "trivy-export-focused",
         "argv": [
           "go",
           "test",
           "./cmd/secscan",
-          "./cmd/tracecheck",
-          "./internal/tracecheck",
-          "."
+          "./internal/scanner",
+          "./internal/report"
         ]
       },
       {

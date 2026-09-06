@@ -506,3 +506,54 @@ EnsureImage call and remove it only after that build completes. Preserve
 normalized bytes/modes/timestamps, image pins and parallel CI. Regression
 coverage prepares multiple contexts concurrently and checks their contents;
 real CLI/Opengrep/code acceptance still runs in parallel packages.
+
+## Trivy reports for Dependency-Track and SonarQube
+
+Keep the existing Trivy filesystem scan with `--list-all-pkgs`, pinned image,
+read-only staged inputs and offline database. The adapter creates two sanitized
+payloads from that one result only when export is requested. Never build an
+SBOM from vulnerability findings: clean packages must survive. Only allowlisted
+package identities, known dependency edges, advisory IDs, severity and validated
+manifest paths cross the adapter boundary. Raw messages, URLs, descriptions,
+license text and scanner properties are excluded.
+
+Use small standard-library JSON encoders for CycloneDX 1.6 and SonarQube's
+rules/issues format. Native Trivy0.74 conversion emits CycloneDX1.7 and has no
+version selector, requiring Dependency-Track5.1+; a second conversion container
+and schema downgrader are unnecessary. The chosen output works with
+Dependency-Track4.12+. BOM references are deterministic, duplicate identities
+merge, dangling/ambiguous relationships are rejected, and unknown dependency
+relationships remain unknown. The SBOM contains inventory, not Trivy BOV data.
+
+SonarQube Server10.3+ reads Generic Issues via sonar.externalIssuesReportPaths.
+Use file-level primaryLocation without invented lines. Export only Trivy's own
+advisories/severities, before cross-scanner merging. Rules carry Standard
+severity/type and SECURITY impacts for MQR. Critical/high map to HIGH impact,
+medium to MEDIUM, low/unknown to LOW with unknown explicitly named. Standard
+mapping is BLOCKER/CRITICAL/MAJOR/MINOR/INFO. A stable rule key includes severity
+to preserve cases where the same advisory has different severity per package.
+Explicit Standard rule fields are verified on Server2025.1+. Older importers,
+including10.3/10.7, derive Standard severity from impacts and therefore merge
+critical/high and low/unknown. Document that display limitation while retaining
+current-format import compatibility. All issues reference an emitted rule.
+No vulnerabilities produces rules:[] and
+issues:[], not null. Sonar file indexing/exclusions are an import prerequisite.
+
+CLI `--trivy-reports DIR` requires trivy in the selection and is unavailable
+for update. Keep the normal JSON stdout and progress stderr contracts. A
+requested export fails with exit1 for Trivy failed/skipped/incomplete inventory,
+even when another scanner succeeded. Generated payloads remain internal fields
+excluded from JSON. Reserve a new directory outside the resolved worktree after
+checks; refuse existing files/directories/symlinks, create private files and
+remove only newly owned output on write failure. Check cancellation before
+publication. No remote calls, server credentials or automatic uploads are added.
+
+One Beads outcome proves the full path through real Trivy into both files.
+Tests cover clean/vulnerable packages, deterministic graph references, hostile
+scanner fields/paths, repeated IDs, mixed severities, empty findings, incomplete
+coverage, output conflicts and unchanged stdout. Validate a generated SBOM
+against the official CycloneDX1.6 schema and compare Sonar output with the
+published importer contract. Local format validation does not claim successful
+import into a user's server. Preserve all existing broad/runtime gates and
+independent security review. Rollback: omit the flag or revert additive commits;
+existing user reports and source files remain untouched.
