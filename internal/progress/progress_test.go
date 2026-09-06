@@ -2,6 +2,7 @@ package progress
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -143,5 +144,65 @@ func TestNoColorKeepsDashboardWithoutColorSequences(t *testing.T) {
 	}
 	if !strings.Contains(got, "gitleaks") {
 		t.Fatal("RenderDashboard(color=false) removed dashboard content")
+	}
+}
+
+func TestFullRosterFitsStandardTerminal(t *testing.T) {
+	now := time.Unix(1, 0)
+	var state Dashboard
+	for i := 0; i < 18; i++ {
+		state.Apply(Event{Scanner: fmt.Sprintf("scanner-%02d", i), Stage: StageQueued, Status: StatusQueued}, now)
+	}
+	got := RenderDashboard(state, now, 80, false)
+	if lines := strings.Count(got, "\n"); lines > 23 {
+		t.Errorf("18-job dashboard has %d lines, want <=23 plus cursor row", lines)
+	}
+	for i := 0; i < 18; i++ {
+		if !strings.Contains(got, fmt.Sprintf("scanner-%02d", i)) {
+			t.Errorf("dashboard omitted scanner-%02d", i)
+		}
+	}
+	if !strings.Contains(got, "scanner-17: queued") {
+		t.Error("dashboard omitted newest event")
+	}
+}
+
+func TestEmptyDashboardHasZeroElapsed(t *testing.T) {
+	got := RenderDashboard(Dashboard{}, time.Now(), 80, false)
+	if !strings.Contains(got, "0 jobs · 0.0s") {
+		t.Errorf("empty dashboard = %q, want zero elapsed", got)
+	}
+}
+
+func TestResizeFallsBackToPlainWithoutLosingScanners(t *testing.T) {
+	var output bytes.Buffer
+	now := time.Unix(1, 0)
+	height := 40
+	reporter := newLive(&output, false, func() time.Time { return now }, func() int { return 80 }, nil, nil)
+	reporter.height = func() int { return height }
+	defer reporter.Close()
+	for i := 0; i < 18; i++ {
+		reporter.Emit(Event{Scanner: fmt.Sprintf("scanner-%02d", i), Stage: StageQueued, Status: StatusQueued})
+	}
+	output.Reset()
+	height = 8
+	now = now.Add(2 * time.Second)
+	reporter.Emit(Event{Scanner: "scanner-00", Stage: StageDone, Status: StatusSuccess})
+	got := output.String()
+	if !strings.Contains(got, showCursor) {
+		t.Error("small-terminal fallback did not restore cursor")
+	}
+	for i := 0; i < 18; i++ {
+		if !strings.Contains(got, fmt.Sprintf("scanner=scanner-%02d", i)) {
+			t.Errorf("plain fallback omitted scanner-%02d", i)
+		}
+	}
+	if !strings.Contains(got, "elapsed_ms=2000") {
+		t.Error("fallback lost elapsed duration")
+	}
+	output.Reset()
+	reporter.Emit(Event{Scanner: "scanner-17", Stage: StageDone, Status: StatusSuccess})
+	if strings.Contains(output.String(), "\x1b[") || !strings.Contains(output.String(), "scanner=scanner-17 stage=done") {
+		t.Errorf("progress after fallback is not plain: %q", output.String())
 	}
 }

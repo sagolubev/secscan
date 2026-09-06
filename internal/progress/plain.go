@@ -16,7 +16,7 @@ type plainReporter struct {
 	seq     uint64
 }
 
-func NewPlain(writer io.Writer, now func() time.Time) Reporter {
+func NewPlain(writer io.Writer, now func() time.Time) *plainReporter {
 	return &plainReporter{
 		writer:  writer,
 		now:     now,
