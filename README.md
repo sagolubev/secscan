@@ -12,7 +12,7 @@ Secscan запускает проверки безопасности локал�
 
 ## Установка
 
-В [релизе v0.1.0](https://github.com/sagolubev/secscan/releases/tag/v0.1.0)
+В [релизе v0.2.0](https://github.com/sagolubev/secscan/releases/tag/v0.2.0)
 выберите файл для своей системы:
 
 | Система | Процессор | Файл |
@@ -29,7 +29,7 @@ Secscan запускает проверки безопасности локал�
 Для другой системы замените значение `asset` по таблице.
 
 ```sh
-version=v0.1.0
+version=v0.2.0
 asset=secscan-darwin-arm64
 release="https://github.com/sagolubev/secscan/releases/download/$version"
 curl -fL "$release/$asset" -o "$asset"
@@ -58,7 +58,7 @@ secscan --version
 ```
 
 Добавьте строку `export PATH=...` в `~/.zshrc` или `~/.bashrc`, чтобы команда
-была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.1.0`.
+была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.2.0`.
 
 `secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
 Оба информационных флага работают без Git-репозитория и Docker.
@@ -125,6 +125,58 @@ Secscan экспортирует их для Trivy и Grype, но не запу�
 После проверки он удаляет только образы, которые загрузил сам.
 Уже существовавшие образы сохраняются.
 
+## Dependency-Track и SonarQube
+
+Начиная с v0.2.0, secscan может сохранить два отчёта из одного запуска Trivy:
+
+```sh
+secscan update --scanners trivy /path/to/repository
+secscan --scanners trivy --trivy-reports /tmp/secscan-trivy \
+  /path/to/repository > /tmp/secscan-report.json
+```
+
+Каталог `/tmp/secscan-trivy` должен быть новым и находиться вне проверяемого
+репозитория. Его родительский каталог должен существовать. Для повторного
+запуска выберите новое имя: secscan не перезаписывает прежние отчёты.
+
+| Файл | Назначение |
+|---|---|
+| `trivy.cdx.json` | CycloneDX 1.6 SBOM для Dependency-Track 4.12+ |
+| `trivy.sonarqube.json` | Внешние замечания для SonarQube Server 10.3+ |
+
+В Dependency-Track откройте проект и загрузите `trivy.cdx.json` как BOM.
+Файл содержит все обнаруженные Trivy пакеты, включая пакеты без уязвимостей.
+Dependency-Track анализирует их своими источниками данных, поэтому его находки
+могут отличаться от Trivy. Связи зависимостей сохраняются, если Trivy их сообщил.
+
+Для SonarQube добавьте property к своему обычному запуску SonarScanner из
+корня проверяемого репозитория:
+
+```sh
+sonar-scanner \
+  -Dsonar.externalIssuesReportPaths=/tmp/secscan-trivy/trivy.sonarqube.json
+```
+
+Настройки проекта и аутентификации SonarScanner остаются вашими.
+Manifest и lockfiles из замечаний должны входить в индекс SonarScanner.
+Проверьте число импортированных замечаний в его логе: исключённые файлы
+SonarQube пропускает. Замечания привязаны к файлу целиком, без выдуманных строк.
+
+Экспорт содержит только зависимости репозитория, прочитанные Trivy.
+Он не включает OCI-образы и результаты других сканеров. Это не SARIF.
+Если Trivy завершился ошибкой, пропущен или оставил unread/failed inputs,
+secscan возвращает `1` и не публикует эти файлы. Доступный обычный JSON
+остаётся в stdout. Полный успешный анализ без уязвимостей создаёт SBOM и
+пустой список замечаний SonarQube.
+
+В SonarQube Server 2025.1+ для Standard Experience уровни Trivy
+critical/high/medium/low/unknown соответствуют BLOCKER/CRITICAL/MAJOR/MINOR/INFO.
+Для MQR используются SECURITY impacts HIGH/HIGH/MEDIUM/LOW/LOW.
+Старые версии, включая 10.3 и 10.7, выводят Standard severity из impacts:
+critical/high и low/unknown в них объединяются. Неизвестная severity явно
+указана в сообщении. Secscan сам ничего не загружает в сервисы и не запрашивает токены.
+[Форматы и ограничения импорта](docs/trivy-export-formats.md).
+
 ## Как читать результат
 
 При наличии `jq` можно посмотреть статусы сканеров:
@@ -146,7 +198,7 @@ jq '.findings[] | {kind, severity, ruleId, path, line, sources}' /tmp/secscan-re
 | Код завершения | Значение |
 |---|---|
 | `0` | Хотя бы один сканер успешен, либо все выбранные проверки пропущены из-за отсутствия подходящих файлов |
-| `1` | Запуск не состоялся или ни один запущенный сканер не завершился успешно |
+| `1` | Запуск не состоялся, все запущенные сканеры завершились ошибкой или запрошенный экспорт не выполнен |
 | `2` | Неверные аргументы |
 
 Сами находки не меняют код завершения. При частичном сбое отчёт сохраняет
