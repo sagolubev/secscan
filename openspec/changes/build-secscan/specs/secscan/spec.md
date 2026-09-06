@@ -406,6 +406,12 @@ requirements, реализующими components и подтверждающи�
 - **WHEN** runtime architecture не поддерживается
 - **THEN** Bearer получает skipped с явной причиной без emulation
 
+#### Scenario: Bearer offline rules
+- **WHEN** Bearer выполняет scan
+- **THEN** он использует подготовленный pinned rule pack без default rule downloads, version checks или domain resolution
+- **AND** rule bytes и ELv2 license хранятся только в private cache, не в распространяемом исходном коде secscan
+- **AND** static rule identity проверяется по digest и version без срока годности advisory feeds
+
 #### Scenario: Cppcheck source build
 - **WHEN** выбран Cppcheck и есть C/C++ files
 - **THEN** scan использует project-owned image из закреплённого upstream source

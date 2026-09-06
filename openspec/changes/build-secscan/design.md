@@ -349,7 +349,18 @@ general Checkov excludes those and API-only SCA/SAST frameworks. Neither
 fetches external modules. KICS uses embedded queries and no description fetch.
 Zizmor discloses omitted API audits. Applicability is based on Git inventory;
 no matching input is skipped. Semgrep reuses embedded MIT Opengrep rules.
-Bearer runs only on amd64. Semgrep and Bearer images are pulled from upstream
+Bearer runs only on the container server's amd64 architecture, without emulation.
+Its default rules require network at scan time, so update prepares a private
+static rule cache from bearer-rules v0.48.4, commit
+30a6919acec715bf915ff4704d1b4ffeac998eab (552 rules). The pinned source archive
+SHA256 is 790e2a9bdfc26d9447a1f3038c4079c7ed56bb6e61c49a924a96d61b5e5fbfd5.
+Cache retains ELv2 license and verifies content identity. Static assets have no
+five-day CVE-feed TTL. Scan disables default rules, version checks, domain
+resolution, target config/ignore loading and archive extraction, and mounts
+only verified external rules. Rule blobs are never embedded in secscan.
+The native amd64 acceptance test is explicit; an arm64 skip does not claim
+that the amd64 analysis path was runtime-verified on this host.
+Semgrep and Bearer images are pulled from upstream
 at runtime preparation and are not redistributed by this project. Semgrep's
 current image labels reference proprietary source; do not label it LGPL-only.
 Cppcheck is built from exact source with GPL source/license/build recipe.
