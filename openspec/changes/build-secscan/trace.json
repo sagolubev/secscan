@@ -547,10 +547,12 @@
       "scenario": "Atomic preparation",
       "disposition": "target",
       "components": [
-        "internal/scanner/cache.go"
+        "internal/scanner/cache.go",
+        "internal/opengrep/image.go"
       ],
       "tests": [
-        "internal/scanner/cache_test.go"
+        "internal/scanner/cache_test.go",
+        "internal/opengrep/image_test.go"
       ]
     },
     {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	scannerassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
@@ -129,5 +130,51 @@ func TestEnsureImageAlwaysBuildsBeforeTrustingTag(t *testing.T) {
 	}
 	if id != "sha256:0123456789abcdef" {
 		t.Errorf("ensureImage() ID = %q", id)
+	}
+}
+
+func TestBuildContextsArePrivateAndStable(t *testing.T) {
+	assets := t.TempDir()
+	for _, name := range []string{"opengrep-amd64", "opengrep-arm64", "OPENGREP-LICENSE"} {
+		if err := os.WriteFile(filepath.Join(assets, name), []byte("synthetic "+name), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type result struct {
+		path string
+		err  error
+	}
+	const builds = 8
+	results := make(chan result, builds) // One bounded result per concurrent preparation.
+	for i := 0; i < builds; i++ {
+		go func() { path, err := stageBuildContext(assets); results <- result{path, err} }()
+	}
+	seen := make(map[string]bool)
+	for i := 0; i < builds; i++ {
+		r := <-results
+		if r.err != nil {
+			t.Errorf("prepare concurrent build: %v", r.err)
+			continue
+		}
+		if r.path == assets || seen[r.path] {
+			t.Errorf("shared build context %q", r.path)
+		}
+		seen[r.path] = true
+	}
+	for path := range seen {
+		for _, arch := range []string{"amd64", "arm64"} {
+			license := filepath.Join(path, "rootfs-"+arch, "etc", "OPENGREP-LGPL-2.1.txt")
+			data, err := os.ReadFile(license)
+			if err != nil || string(data) != "synthetic OPENGREP-LICENSE" {
+				t.Errorf("build context mutated by another preparation: %q, %v", data, err)
+			}
+			info, err := os.Stat(license)
+			if err != nil || info.Mode().Perm() != 0444 {
+				t.Errorf("license permissions changed: %v", err)
+			}
+		}
+		if !strings.HasPrefix(path, assets+string(filepath.Separator)) {
+			t.Errorf("context outside cache: %q", path)
+		}
 	}
 }

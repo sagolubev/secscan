@@ -68,7 +68,7 @@ failed statuses; диагностика остаётся в stderr. Exit codes: 
 
 Проверяйте `coverage`, `unreadInputs`, `failedInputs` и `limitations`, а не
 только число findings. Python/TypeScript и Semgrep используют собственные восемь
-MIT rules. Bearer пропускается на ARM64; native amd64 run здесь не проверялся.
+MIT rules. Bearer пропускается на ARM64; native amd64 acceptance выполняется в GitHub CI.
 Его SARIF подтверждает только paths с findings: остальные inputs остаются
 unread, пустой неподтверждённый результат даёт failure. Bearer rules и upstream
 images используются через private cache, без redistribution.

@@ -83,6 +83,7 @@ func EnsureImage(ctx context.Context, runtime container.Runtime) (string, error)
 	if err != nil {
 		return "", err
 	}
+	defer os.RemoveAll(assetsDir)
 	return ensureImage(ctx, runtime, assetsDir)
 }
 
@@ -104,6 +105,8 @@ func ensureImage(ctx context.Context, runtime imageRuntime, assetsDir string) (s
 	return metadata.ID, nil
 }
 
+// EnsureAssets verifies cached downloads and returns a private build context.
+// The caller must remove the returned directory after the build consumes it.
 func EnsureAssets(ctx context.Context) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -122,13 +125,22 @@ func EnsureAssets(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("prepare %s: %w", asset.Name, err)
 		}
 	}
-	if err := prepareBuildContext(directory); err != nil {
+	return stageBuildContext(directory)
+}
+
+func stageBuildContext(assetsDirectory string) (string, error) {
+	directory, err := os.MkdirTemp(assetsDirectory, "build-")
+	if err != nil {
+		return "", fmt.Errorf("create private build context: %w", err)
+	}
+	if err := prepareBuildContext(directory, assetsDirectory); err != nil {
+		os.RemoveAll(directory)
 		return "", err
 	}
 	return directory, nil
 }
 
-func prepareBuildContext(directory string) error {
+func prepareBuildContext(directory, assetsDirectory string) error {
 	epoch := time.Unix(1787938317, 0)
 	dockerfile, err := scannerassets.Files.ReadFile("Dockerfile")
 	if err != nil {
@@ -143,16 +155,13 @@ func prepareBuildContext(directory string) error {
 	}
 	for _, architecture := range []string{"amd64", "arm64"} {
 		target := filepath.Join(directory, "rootfs-"+architecture)
-		if err := os.RemoveAll(target); err != nil {
-			return fmt.Errorf("reset %s rootfs: %w", architecture, err)
-		}
 		files := []struct {
 			source string
 			target string
 			mode   os.FileMode
 		}{
-			{filepath.Join(directory, "opengrep-"+architecture), "usr/local/bin/opengrep", 0o555},
-			{filepath.Join(directory, "OPENGREP-LICENSE"), "etc/OPENGREP-LGPL-2.1.txt", 0o444},
+			{filepath.Join(assetsDirectory, "opengrep-"+architecture), "usr/local/bin/opengrep", 0o555},
+			{filepath.Join(assetsDirectory, "OPENGREP-LICENSE"), "etc/OPENGREP-LGPL-2.1.txt", 0o444},
 		}
 		for _, file := range files {
 			if err := copyAsset(file.source, filepath.Join(target, file.target), file.mode, epoch); err != nil {

@@ -495,3 +495,14 @@ failures. No comparative time/token savings are assumed. Local checks precede
 publication; actual hosted workflow and release assets establish readiness.
 Rollback is additive corrective commits/releases; do not rewrite the existing
 project history or replace a released asset silently.
+
+### Hosted acceptance correction: private Opengrep build contexts
+
+The first public Linux amd64 CI run exposed concurrent package preparation
+mutating a shared Opengrep rootfs directory. Read-only license replacement
+failed; a build could also observe a tree being reset by another caller.
+Keep verified downloads shared, but materialize a unique build context per
+EnsureImage call and remove it only after that build completes. Preserve
+normalized bytes/modes/timestamps, image pins and parallel CI. Regression
+coverage prepares multiple contexts concurrently and checks their contents;
+real CLI/Opengrep/code acceptance still runs in parallel packages.
