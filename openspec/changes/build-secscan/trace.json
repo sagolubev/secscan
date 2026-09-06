@@ -3,28 +3,21 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.14",
-  "baselineCommit": "b88dd708a987db86d4b693295faed53b1bfd5e47",
+  "targetOutcome": "secscan-ij8.15",
+  "baselineCommit": "b14aa1664f73202df152c47d7f4447e7836b6644",
   "scope": {
     "implementation": [
-      "cmd/secscan/main.go",
-      "cmd/secscan/main_test.go",
-      "cmd/secscan/export.go",
-      "cmd/secscan/export_test.go",
-      "internal/scanner/dependencies.go",
-      "internal/scanner/trivy_export.go",
-      "internal/scanner/trivy_export_test.go",
-      "internal/report/report.go",
-      "internal/report/trivy.go"
+      "install.sh",
+      ".github/scripts/test-installer.py",
+      ".github/workflows/ci.yml"
     ],
     "governance": [
       "README.md",
-      "docs/trivy-export-formats.md",
-      "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/proposal.md",
-      "openspec/changes/build-secscan/design.md",
       "openspec/changes/build-secscan/specs/secscan/spec.md",
-      "openspec/changes/build-secscan/.stale.json"
+      "openspec/changes/build-secscan/design.md",
+      "openspec/changes/build-secscan/.stale.json",
+      "openspec/changes/build-secscan/trace.json"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -904,6 +897,50 @@
         "internal/scanner/trivy_export_test.go",
         "cmd/secscan/export_test.go"
       ]
+    },
+    {
+      "requirement": "Single-command binary installation",
+      "scenario": "Platform and version selection",
+      "disposition": "target",
+      "components": [
+        "install.sh"
+      ],
+      "tests": [
+        ".github/scripts/test-installer.py"
+      ]
+    },
+    {
+      "requirement": "Single-command binary installation",
+      "scenario": "Verified atomic replacement",
+      "disposition": "target",
+      "components": [
+        "install.sh"
+      ],
+      "tests": [
+        ".github/scripts/test-installer.py"
+      ]
+    },
+    {
+      "requirement": "Single-command binary installation",
+      "scenario": "Installation failure isolation",
+      "disposition": "target",
+      "components": [
+        "install.sh"
+      ],
+      "tests": [
+        ".github/scripts/test-installer.py"
+      ]
+    },
+    {
+      "requirement": "Single-command binary installation",
+      "scenario": "Installation instructions and tests",
+      "disposition": "target",
+      "components": [
+        "install.sh"
+      ],
+      "tests": [
+        ".github/scripts/test-installer.py"
+      ]
     }
   ],
   "checks": {
@@ -936,13 +973,18 @@
     ],
     "target": [
       {
-        "name": "trivy-export-focused",
+        "name": "installer-syntax",
         "argv": [
-          "go",
-          "test",
-          "./cmd/secscan",
-          "./internal/scanner",
-          "./internal/report"
+          "sh",
+          "-n",
+          "install.sh"
+        ]
+      },
+      {
+        "name": "installer-tests",
+        "argv": [
+          "python3",
+          ".github/scripts/test-installer.py"
         ]
       },
       {
@@ -1009,6 +1051,21 @@
         ],
         "env": [
           "SECSCAN_ACCEPTANCE=1"
+        ]
+      },
+      {
+        "name": "installer-syntax",
+        "argv": [
+          "sh",
+          "-n",
+          "install.sh"
+        ]
+      },
+      {
+        "name": "installer-tests",
+        "argv": [
+          "python3",
+          ".github/scripts/test-installer.py"
         ]
       }
     ]

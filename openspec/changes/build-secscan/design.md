@@ -557,3 +557,36 @@ published importer contract. Local format validation does not claim successful
 import into a user's server. Preserve all existing broad/runtime gates and
 independent security review. Rollback: omit the flag or revert additive commits;
 existing user reports and source files remain untouched.
+
+## Portable binary installer
+
+Add root install.sh using POSIX sh, curl and SHA256 tools already available on
+Linux/macOS. Reuse the repository's existing HTTPS download and checksum pattern;
+local GitHub-card search confirmed the common installer approach in GoBackup and
+Toad, but their product-specific installers are not dependencies. Use one
+stable-tag resolution through GitHub releases/latest HTTPS redirect, then fetch
+both artifacts from that exact tag. No API token, JSON parser or compiler is
+required. Version input must match vMAJOR.MINOR.PATCH; URL origin/repository are
+fixed. Reject invalid latest redirect responses.
+
+Read --version and --dir, detect uname OS/architecture, and prefer sha256sum
+with shasum -a256 fallback. A private mktemp download directory and traps limit
+cleanup to owned files. Reject missing, malformed or duplicate checksum entries.
+Create a temporary file inside the destination directory only after digest
+verification, set executable mode, and verify --version before rename to secscan.
+Reject directory/symlink destinations, preserve previous executable on failure,
+and clean both staging locations. Default directory is ~/.local/bin; print a
+PATH hint when necessary without editing profiles. Do not use sudo, change
+permissions on existing directories or install Git/container runtimes.
+
+Tests use Python unittest from the standard library and subprocess execution of
+the actual script through stdin. Fake curl/uname isolate downloads and platform
+selection; real shell/filesystem/SHA256 tools exercise installation and failure
+behavior. Synthetic executable payloads prove that an invalid digest never runs.
+Cover all four targets, latest tag pinning, specified versions, spaces in paths,
+checksum/download errors, failed executable validation, upgrades and conflicting
+destinations. Run on Linux/macOS in existing CI checks. Finally install the real
+released binary into a temporary directory and inspect --version/--licenses.
+An independent security review covers the network-to-executable boundary.
+Rollback is removal of the installer/docs commit; existing release assets and
+application behavior are unchanged.

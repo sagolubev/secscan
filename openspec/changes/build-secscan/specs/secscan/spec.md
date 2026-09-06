@@ -530,3 +530,32 @@ GitHub Actions SHALL проверять source changes и публиковать
 - **THEN** документация указывает версии форматов, загрузку SBOM в Dependency-Track и property импорта SonarQube
 - **AND** поясняет, что Dependency-Track анализирует inventory самостоятельно, а SonarQube импортирует замечания только для проиндексированных файлов
 - **AND** repository dependency export не выдаётся за OCI image SBOM или SARIF экспорт всех scanners
+
+### Requirement: Single-command binary installation
+
+Система SHALL предоставлять самостоятельный POSIX install.sh для установки опубликованного бинарника одной командой `curl ... | sh`.
+
+#### Scenario: Platform and version selection
+- **WHEN** installer запущен на Linux или macOS с amd64/x86_64 либо arm64/aarch64
+- **THEN** выбирается соответствующий release executable
+- **AND** default latest разрешается один раз в конкретный стабильный tag, общий для binary и SHA256SUMS
+- **AND** --version и --dir задают конкретную версию и каталог; default directory равен ~/.local/bin
+- **AND** неподдерживаемая платформа и некорректные аргументы отклоняются без установки
+
+#### Scenario: Verified atomic replacement
+- **WHEN** installer скачал бинарник и SHA256SUMS через HTTPS
+- **THEN** требуется ровно одна корректная checksum entry для выбранного файла и совпадение SHA256 до исполнения или установки
+- **AND** проверенный executable должен сообщить ожидаемую версию через --version
+- **AND** подготовленный файл заменяет прежний secscan через rename внутри filesystem каталога установки
+
+#### Scenario: Installation failure isolation
+- **WHEN** download, checksum, version check или filesystem operation завершается ошибкой
+- **THEN** installer возвращает ненулевой exit code и сохраняет прежний бинарник
+- **AND** временные файлы installer удаляются
+- **AND** существующие directory или symlink с именем secscan не заменяются
+- **AND** installer не вызывает sudo, не меняет shell profiles и не готовит scanner assets
+
+#### Scenario: Installation instructions and tests
+- **WHEN** пользователь открывает README
+- **THEN** первым способом установки показана одна curl-to-sh команда, а также выбор версии/каталога и условие PATH
+- **AND** installer tests проверяют платформы, upgrade, checksum/download failures и сохранение существующих файлов на Linux и macOS в CI

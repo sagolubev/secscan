@@ -38,6 +38,17 @@ service credentials. Incomplete Trivy extraction must fail the requested export.
 This is one feature outcome with a real Trivy-to-files acceptance seam;
 Standard artifacts and Comprehensive verification remain applicable.
 
+## Binary installer
+
+Publish a self-contained POSIX `install.sh` for one-command installation from
+GitHub. Detect Linux/macOS and amd64/arm64, resolve the latest stable release
+once or accept `--version`, verify the selected binary against SHA256SUMS,
+and install to `~/.local/bin` or `--dir`. Preserve an existing installation on
+failure and replace it only with a verified executable. Do not install runtimes,
+use sudo, edit shell profiles or change the release asset set. This single
+outcome includes installer tests on Linux/macOS and a real published-binary
+installation check; the existing feature profile and verification depth apply.
+
 ## Capabilities
 
 ### New Capabilities
