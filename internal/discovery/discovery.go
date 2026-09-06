@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,9 @@ type Exclusions struct {
 }
 
 type Inventory struct {
+	Terraform  []string
+	Checkov    []string
+	KICS       []string
 	Python     []string
 	TypeScript []string
 	CI         []string
@@ -62,6 +66,25 @@ func Discover(root string) (Inventory, error) {
 		}
 		if zizmor || poutine {
 			inventory.CI = append(inventory.CI, path)
+		}
+
+		terraform := strings.HasSuffix(path, ".tf") || strings.HasSuffix(path, ".tofu") || strings.HasSuffix(path, ".tf.json") || strings.HasSuffix(path, ".tofu.json") || strings.HasSuffix(path, ".tfplan.json")
+		config := strings.HasPrefix(strings.TrimPrefix(base, "."), "checkov.") || strings.HasPrefix(strings.TrimPrefix(base, "."), "kics.")
+		if !terraform && !config && strings.HasSuffix(path, ".json") && info.Mode().IsRegular() {
+			terraform, err = isTerraformPlan(root, path)
+			if err != nil {
+				return Inventory{}, err
+			}
+		}
+		general := !terraform && !config && (yaml || strings.HasSuffix(path, ".json") || base == "Dockerfile" || strings.HasPrefix(base, "Dockerfile."))
+		if terraform {
+			inventory.Terraform = append(inventory.Terraform, path)
+		}
+		if general {
+			inventory.Checkov = append(inventory.Checkov, path)
+		}
+		if terraform || general {
+			inventory.KICS = append(inventory.KICS, path)
 		}
 
 		switch strings.ToLower(filepath.Ext(path)) {
@@ -183,4 +206,53 @@ func copyFile(source, destination string) error {
 		return fmt.Errorf("close staged target %q: %w", destination, err)
 	}
 	return nil
+}
+
+// isTerraformPlan recognizes JSON plan exports regardless of their filename.
+func isTerraformPlan(root, path string) (bool, error) {
+	source, err := safeSource(root, path)
+	if err != nil {
+		return false, err
+	}
+	input, err := os.Open(source)
+	if err != nil {
+		return false, err
+	}
+	defer input.Close()
+	// Read top-level keys without retaining resource values or requiring the full plan.
+	decoder := json.NewDecoder(input)
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return false, nil
+	}
+	version, plan := false, false
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return false, nil
+		}
+		version = version || key == "format_version"
+		plan = plan || key == "planned_values" || key == "resource_changes"
+		if version && plan {
+			return true, nil
+		}
+		depth := 0
+		for {
+			token, err = decoder.Token()
+			if err != nil {
+				return false, nil
+			}
+			if delim, ok := token.(json.Delim); ok {
+				if delim == '{' || delim == '[' {
+					depth++
+				} else {
+					depth--
+				}
+			}
+			if depth == 0 {
+				break
+			}
+		}
+	}
+	return false, nil
 }

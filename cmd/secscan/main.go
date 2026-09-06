@@ -148,7 +148,8 @@ func scan(
 	needsRuntime := slices.Contains(selection, "gitleaks") ||
 		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
 		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
-		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0
+		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
+		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0
 	var runtime container.Runtime
 	if needsRuntime {
 		runtime, err = container.DetectDefault(ctx)
@@ -271,13 +272,20 @@ func scan(
 		})
 	}
 
-	for _, name := range []string{"zizmor", "poutine"} {
+	for _, name := range []string{"zizmor", "poutine", "checkov", "checkov-terraform", "kics"} {
 		if !slices.Contains(selection, name) {
 			continue
 		}
 		files := inventory.Zizmor
-		if name == "poutine" {
+		switch name {
+		case "poutine":
 			files = inventory.Poutine
+		case "checkov":
+			files = inventory.Checkov
+		case "checkov-terraform":
+			files = inventory.Terraform
+		case "kics":
+			files = inventory.KICS
 		}
 		if len(files) == 0 {
 			skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", Coverage: report.Coverage{Unit: "files"}})
@@ -292,6 +300,9 @@ func scan(
 		jobs = append(jobs, orchestrator.Job{Name: name, Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
 			if err := preparationErrors[name]; err != nil {
 				return report.Scanner{}, nil, err
+			}
+			if name == "checkov" || name == "checkov-terraform" || name == "kics" {
+				return scanner.ScanIaC(ctx, runtime, cache, name, root, files, emit)
 			}
 			return scanner.ScanCI(ctx, runtime, cache, name, root, files, emit)
 		}})
@@ -340,7 +351,7 @@ func buildReport(
 }
 
 func parseScannerSelection(value string) ([]string, error) {
-	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine"}
+	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics"}
 	if value == "all" {
 		return allowed, nil
 	}

@@ -34,9 +34,13 @@ type Feed struct {
 }
 
 type Coverage struct {
-	Read   int    `json:"read"`
-	Failed int    `json:"failed"`
-	Unit   string `json:"unit"`
+	Unread        int    `json:"unread,omitempty"`
+	FailedFiles   int    `json:"failedFiles,omitempty"`
+	FailedQueries int    `json:"failedQueries,omitempty"`
+	Skipped       int    `json:"skipped,omitempty"`
+	Read          int    `json:"read"`
+	Failed        int    `json:"failed"`
+	Unit          string `json:"unit"`
 }
 
 type Exclusions struct {

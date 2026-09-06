@@ -141,3 +141,59 @@ func TestZizmorPreCommitExactNames(t *testing.T) {
 		t.Fatalf("Zizmor=%q, want %q", got.Zizmor, want)
 	}
 }
+
+func TestIaCInventoryExcludesConfiguration(t *testing.T) {
+	root := newGitRepository(t)
+	for _, path := range []string{"main.tf", "main.tofu", "main.tf.json", "plan.tfplan.json", "Dockerfile", "k8s/pod.yaml", "compose.yml", ".checkov.yml", "checkov.yaml", "kics.config", ".kics.config", "checks/execute.py", "ignored.tf"} {
+		writeFile(t, root, path, "synthetic")
+	}
+	writeFile(t, root, ".gitignore", "ignored.tf\n")
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Terraform) != 4 || len(got.Checkov) != 3 || len(got.KICS) != 7 {
+		t.Fatalf("IaC inventory=%#v", got)
+	}
+}
+
+func TestIaCPlanJSONDiscovery(t *testing.T) {
+	root := newGitRepository(t)
+	writeFile(t, root, "custom-output.json", `{"format_version":"1.2","planned_values":{"root_module":{}}}`)
+	writeFile(t, root, "template.json", `{"Resources":{}}`)
+	got, err := Discover(root)
+	if err != nil || !reflect.DeepEqual(got.Terraform, []string{"custom-output.json"}) || !reflect.DeepEqual(got.Checkov, []string{"template.json"}) {
+		t.Fatalf("plan inventory=%#v err=%v", got, err)
+	}
+}
+
+func TestIaCPlanDiscoveryOnlyTopLevel(t *testing.T) {
+	root := newGitRepository(t)
+	writeFile(t, root, "not-plan.json", `{"nested":{"format_version":"1","planned_values":{}}}`)
+	writeFile(t, root, "export.json", `{"metadata":[{"nested":[1,2,3]}],"format_version":"1.2","planned_values":{"root_module":{}}}`)
+	got, err := Discover(root)
+	if err != nil || !reflect.DeepEqual(got.Terraform, []string{"export.json"}) {
+		t.Fatalf("inventory=%#v err=%v", got, err)
+	}
+}
+
+func TestPlanFilenameDoesNotDetermineFramework(t *testing.T) {
+	for _, test := range []struct {
+		content   string
+		terraform bool
+	}{
+		{`{"Resources":{"Bucket":{"Type":"AWS::S3::Bucket"}}}`, false},
+		{`{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","resources":[]}`, false},
+		{`{"format_version":"1.2","planned_values":{"root_module":{}}}`, true},
+	} {
+		root := newGitRepository(t)
+		writeFile(t, root, "plan.json", test.content)
+		got, err := Discover(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (len(got.Terraform) == 1) != test.terraform || (len(got.Checkov) == 1) == test.terraform {
+			t.Errorf("plan.json inventory=%#v want terraform=%v", got, test.terraform)
+		}
+	}
+}

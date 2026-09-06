@@ -26,7 +26,7 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			var id, ref string
 			var err error
 			switch key {
-			case "gitleaks", "zizmor", "poutine":
+			case "gitleaks", "zizmor", "poutine", "checkov", "checkov-terraform", "kics":
 				ref = gitleaks.Image
 				if key != "gitleaks" {
 					ref = Catalog()[key].Image

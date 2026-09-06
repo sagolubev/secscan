@@ -190,8 +190,8 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) < 3 || len(got.Scanners) != 5 {
-		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/5", len(got.Findings), len(got.Scanners))
+	if len(got.Findings) < 3 || len(got.Scanners) != 8 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/8", len(got.Findings), len(got.Scanners))
 	}
 }
 
@@ -240,6 +240,103 @@ func TestCISkippedWithoutRuntime(t *testing.T) {
 	for _, scanner := range result.Scanners {
 		if scanner.Status != "skipped" {
 			t.Fatalf("%#v", scanner)
+		}
+	}
+}
+
+func TestIaCSkippedWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	selected, err := parseScannerSelection("checkov,checkov-terraform,kics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := scan(context.Background(), root, selected, func(progress.Event) {})
+	if err != nil || len(result.Scanners) != 3 {
+		t.Fatalf("%#v %v", result, err)
+	}
+	for _, scanner := range result.Scanners {
+		if scanner.Status != "skipped" {
+			t.Fatalf("%#v", scanner)
+		}
+	}
+}
+
+func TestIaCMissingPreparation(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte("synthetic"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte("FROM scratch\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", home)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SECSCAN_TEST_CALLS", log)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	for _, name := range []string{"checkov", "checkov-terraform", "kics"} {
+		_, err := scan(context.Background(), root, []string{name}, func(progress.Event) {})
+		if err == nil || !strings.Contains(err.Error(), "secscan update") {
+			t.Errorf("%s error=%v", name, err)
+		}
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "info\ninfo\ninfo\n" {
+		t.Fatalf("unexpected runtime commands: %s", data)
+	}
+}
+
+func TestCLIRejectsIaCWithoutEvaluatedInputs(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte("broken = ["), 0600); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", home)
+	bin := t.TempDir()
+	t.Setenv("SECSCAN_TEST_IMAGE_ID", "sha256:"+strings.Repeat("a", 64))
+	script := `#!/bin/sh
+case "$1" in info|pull) exit 0;; image) printf '%s\n' "$SECSCAN_TEST_IMAGE_ID"; exit 0;; esac
+for arg in "$@"; do
+ case "$arg" in type=bind,src=*,dst=/out) output="${arg#type=bind,src=}"; output="${output%,dst=/out}"; printf '%s\n' "$SECSCAN_TEST_RESULT" > "$output/result.json";; esac
+done
+printf '%s\n' "$SECSCAN_TEST_RESULT"
+`
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var updateError bytes.Buffer
+	if code := run(context.Background(), []string{"update", "--scanners", "checkov-terraform,kics", root}, &bytes.Buffer{}, &updateError, scan); code != 0 {
+		t.Fatalf("prepare exit=%d: %s", code, &updateError)
+	}
+	for name, data := range map[string]string{
+		"checkov-terraform": `{"check_type":"terraform","results":{"failed_checks":[]},"summary":{"passed":0,"failed":0,"skipped":0,"parsing_errors":1}}`,
+		"kics":              `{"files_scanned":1,"files_parsed":0,"files_failed_to_scan":0,"queries_failed_to_execute":0,"queries_failed_to_compute_similarity_id":0,"queries":[]}`,
+	} {
+		t.Setenv("SECSCAN_TEST_RESULT", data)
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"--scanners", name, root}, &stdout, &stderr, scan)
+		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "all selected scanners failed") {
+			t.Errorf("%s zero analysis: exit=%d stdout=%s stderr=%s", name, code, &stdout, &stderr)
 		}
 	}
 }
