@@ -197,3 +197,22 @@ func TestPlanFilenameDoesNotDetermineFramework(t *testing.T) {
 		}
 	}
 }
+
+func TestDependencyDiscovery(t *testing.T) {
+	root := newGitRepository(t)
+	for _, name := range []string{"package-lock.json", "nested/poetry.lock", "go.mod", "pom.xml", "build.gradle.kts", "libs.versions.toml", "ignored/Cargo.lock", ".osv-scanner.toml", "unrelated.json"} {
+		writeFile(t, root, name, "synthetic")
+	}
+	writeFile(t, root, ".gitignore", "ignored/\n")
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"build.gradle.kts", "go.mod", "libs.versions.toml", "nested/poetry.lock", "package-lock.json", "pom.xml"}
+	if !reflect.DeepEqual(got.Dependencies, want) {
+		t.Fatalf("dependencies=%q want %q", got.Dependencies, want)
+	}
+	if DependencyEcosystem("nested/poetry.lock") != "PyPI" || DependencyEcosystem("package-lock.json") != "npm" || DependencyEcosystem(".osv-scanner.toml") != "" {
+		t.Fatal("wrong ecosystem classification")
+	}
+}

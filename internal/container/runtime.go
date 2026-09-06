@@ -134,3 +134,40 @@ func (runtime Runtime) OutputRejecting(ctx context.Context, args []string, marke
 	}
 	return output.Bytes(), nil
 }
+
+// OutputStatus returns bounded stdout and the process exit code. Launch errors,
+// cancellation, oversized output and known failure diagnostics remain errors;
+// stderr content never leaves this boundary.
+func (runtime Runtime) OutputStatus(ctx context.Context, args []string, markers []string, required ...string) ([]byte, int, error) {
+	command := exec.CommandContext(ctx, runtime.Binary, args...)
+	var output, diagnostics limitedBuffer
+	command.Stdout = &output
+	command.Stderr = &diagnostics
+	err := command.Run()
+	if ctx.Err() != nil {
+		return nil, 0, ctx.Err()
+	}
+	code := 0
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			return nil, 0, fmt.Errorf("scanner could not start")
+		}
+		code = exit.ExitCode()
+	}
+	if output.exceeded || diagnostics.exceeded {
+		return nil, code, fmt.Errorf("scanner output exceeds 64 MiB limit")
+	}
+	lower := bytes.ToLower(diagnostics.Bytes())
+	for _, marker := range markers {
+		if bytes.Contains(lower, []byte(marker)) {
+			return nil, code, fmt.Errorf("scanner reported an input analysis failure")
+		}
+	}
+	for _, marker := range required {
+		if !bytes.Contains(lower, []byte(marker)) {
+			return nil, code, fmt.Errorf("scanner did not confirm analysis")
+		}
+	}
+	return output.Bytes(), code, nil
+}

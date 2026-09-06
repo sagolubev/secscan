@@ -7,12 +7,17 @@ import (
 	"time"
 
 	"github.com/sigiuscom/secscan/internal/container"
+	"github.com/sigiuscom/secscan/internal/discovery"
 	"github.com/sigiuscom/secscan/internal/gitleaks"
 	"github.com/sigiuscom/secscan/internal/opengrep"
 )
 
-// Update prepares the selected scanners; path reserves repository-scoped feed discovery.
+// Update prepares selected engines and feeds required by repository inputs.
 func Update(ctx context.Context, runtime container.Runtime, cache Cache, selection []string, path string) error {
+	inventory, err := discovery.Discover(path)
+	if err != nil {
+		return err
+	}
 	return cache.Update(ctx, func(ctx context.Context, staging string) (map[string]Asset, error) {
 		result := map[string]Asset{}
 		for _, name := range selection {
@@ -26,7 +31,7 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			var id, ref string
 			var err error
 			switch key {
-			case "gitleaks", "zizmor", "poutine", "checkov", "checkov-terraform", "kics":
+			case "gitleaks", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner":
 				ref = gitleaks.Image
 				if key != "gitleaks" {
 					ref = Catalog()[key].Image
@@ -45,7 +50,15 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			if err != nil {
 				return nil, fmt.Errorf("prepare %s: %w", name, err)
 			}
-			result[key] = Asset{ImageID: id, ImageRef: ref}
+			asset := Asset{ImageID: id, ImageRef: ref}
+			if key == "trivy" || key == "grype" || key == "osv-scanner" {
+				files, _ := DependencyInputs(inventory.Dependencies)
+				asset.Feeds, err = prepareDependencyFeeds(ctx, runtime, key, id, staging, files)
+				if err != nil {
+					return nil, fmt.Errorf("prepare %s feeds: %w", key, err)
+				}
+			}
+			result[key] = asset
 		}
 		return result, nil
 	})

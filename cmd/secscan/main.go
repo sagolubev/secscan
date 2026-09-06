@@ -145,11 +145,13 @@ func scan(
 	for _, name := range selection {
 		emit(progress.Event{Scanner: name, Stage: progress.StageQueued, Status: progress.StatusQueued})
 	}
+	dependencyFiles, dependencyUnread := scanner.DependencyInputs(inventory.Dependencies)
 	needsRuntime := slices.Contains(selection, "gitleaks") ||
 		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
 		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
 		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
-		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0
+		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0 ||
+		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0
 	var runtime container.Runtime
 	if needsRuntime {
 		runtime, err = container.DetectDefault(ctx)
@@ -272,7 +274,7 @@ func scan(
 		})
 	}
 
-	for _, name := range []string{"zizmor", "poutine", "checkov", "checkov-terraform", "kics"} {
+	for _, name := range []string{"zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner"} {
 		if !slices.Contains(selection, name) {
 			continue
 		}
@@ -286,20 +288,35 @@ func scan(
 			files = inventory.Terraform
 		case "kics":
 			files = inventory.KICS
+		case "trivy", "grype", "osv-scanner":
+			files = inventory.Dependencies
 		}
-		if len(files) == 0 {
-			skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", Coverage: report.Coverage{Unit: "files"}})
+		dependency := name == "trivy" || name == "grype" || name == "osv-scanner"
+		if len(files) == 0 || dependency && len(dependencyFiles) == 0 {
+			coverage := report.Coverage{Unit: "files"}
+			if dependency {
+				coverage.Unread = len(dependencyUnread)
+				coverage.UnreadInputs = dependencyUnread
+			}
+			skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", Coverage: coverage})
 			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 			continue
 		}
 		if cacheErr != nil {
 			preparationErrors[name] = cacheErr
+		} else if name == "trivy" || name == "grype" || name == "osv-scanner" {
+			if _, _, err := cache.ResolveDependencies(ctx, runtime, name, files); err != nil {
+				preparationErrors[name] = err
+			}
 		} else if _, err := cache.Resolve(ctx, runtime, name); err != nil {
 			preparationErrors[name] = err
 		}
 		jobs = append(jobs, orchestrator.Job{Name: name, Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
 			if err := preparationErrors[name]; err != nil {
 				return report.Scanner{}, nil, err
+			}
+			if name == "trivy" || name == "grype" || name == "osv-scanner" {
+				return scanner.ScanDependencies(ctx, runtime, cache, name, root, files, emit)
 			}
 			if name == "checkov" || name == "checkov-terraform" || name == "kics" {
 				return scanner.ScanIaC(ctx, runtime, cache, name, root, files, emit)
@@ -311,6 +328,11 @@ func scan(
 	result, runErr := orchestrator.Run(ctx, jobs, 3, emit)
 
 	for i := range result.Scanners {
+		name := result.Scanners[i].Name
+		if result.Scanners[i].Status == "failed" && (name == "trivy" || name == "grype" || name == "osv-scanner") {
+			result.Scanners[i].Coverage.FailedInputs = append([]string(nil), inventory.Dependencies...)
+			result.Scanners[i].Coverage.FailedFiles = len(inventory.Dependencies)
+		}
 		if preparationErrors[result.Scanners[i].Name] != nil {
 			result.Scanners[i].Limitations = []string{"prepared assets unavailable; run secscan update"}
 		}
@@ -351,7 +373,7 @@ func buildReport(
 }
 
 func parseScannerSelection(value string) ([]string, error) {
-	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics"}
+	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner"}
 	if value == "all" {
 		return allowed, nil
 	}

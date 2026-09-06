@@ -70,3 +70,26 @@ func TestIsolatedArgsPreservesRootOwner(t *testing.T) {
 		t.Fatal("isolatedArgs(root) missing explicit user")
 	}
 }
+
+func TestOutputStatusPreservesFindingExitAndRejectsDiagnostics(t *testing.T) {
+	runtime := Runtime{Binary: "sh"}
+	data, code, err := runtime.OutputStatus(context.Background(), []string{"-c", `printf '{}'; printf 'SYNTHETIC_CANARY' >&2; exit 1`}, nil)
+	if err != nil || code != 1 || string(data) != "{}" {
+		t.Fatalf("OutputStatus=%q,%d,%v", data, code, err)
+	}
+	_, _, err = runtime.OutputStatus(context.Background(), []string{"-c", `printf '{}'; printf 'failed to parse SYNTHETIC_CANARY' >&2`}, []string{"failed to parse"})
+	if err == nil || strings.Contains(err.Error(), "SYNTHETIC_CANARY") {
+		t.Fatalf("diagnostic error=%v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := runtime.OutputStatus(ctx, []string{"-c", "exit 0"}, nil); err == nil {
+		t.Fatal("accepted cancellation")
+	}
+}
+
+func TestOutputStatusRequiresAnalysisMarker(t *testing.T) {
+	if _, _, err := (Runtime{Binary: "sh"}).OutputStatus(context.Background(), []string{"-c", `printf '{}'`}, nil, "gathered packages packages="); err == nil {
+		t.Fatal("accepted missing analysis evidence")
+	}
+}

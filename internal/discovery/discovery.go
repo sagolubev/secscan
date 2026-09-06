@@ -18,15 +18,16 @@ type Exclusions struct {
 }
 
 type Inventory struct {
-	Terraform  []string
-	Checkov    []string
-	KICS       []string
-	Python     []string
-	TypeScript []string
-	CI         []string
-	Zizmor     []string
-	Poutine    []string
-	Ignored    Exclusions
+	Dependencies []string
+	Terraform    []string
+	Checkov      []string
+	KICS         []string
+	Python       []string
+	TypeScript   []string
+	CI           []string
+	Zizmor       []string
+	Poutine      []string
+	Ignored      Exclusions
 }
 
 func Discover(root string) (Inventory, error) {
@@ -53,6 +54,9 @@ func Discover(root string) (Inventory, error) {
 		}
 
 		base := filepath.Base(path)
+		if DependencyEcosystem(path) != "" {
+			inventory.Dependencies = append(inventory.Dependencies, path)
+		}
 		yaml := strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")
 		stem := strings.TrimSuffix(strings.TrimPrefix(base, "."), filepath.Ext(base))
 		github := filepath.Dir(path) == ".github/workflows" && yaml || base == "action.yml" || base == "action.yaml"
@@ -255,4 +259,31 @@ func isTerraformPlan(root, path string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// DependencyEcosystem identifies finite dependency candidates without reading or
+// executing project code. Candidates unsupported by an adapter remain unread.
+func DependencyEcosystem(file string) string {
+	switch filepath.Base(file) {
+	case "package.json", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb":
+		return "npm"
+	case "go.mod", "go.sum":
+		return "Go"
+	case "requirements.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock", "pyproject.toml", "setup.py", "setup.cfg":
+		return "PyPI"
+	case "Cargo.toml", "Cargo.lock":
+		return "crates.io"
+	case "composer.json", "composer.lock":
+		return "Packagist"
+	case "Gemfile", "Gemfile.lock":
+		return "RubyGems"
+	case "packages.lock.json", "packages.config":
+		return "NuGet"
+	case "pom.xml", "build.gradle", "build.gradle.kts", "gradle.lockfile":
+		return "Maven"
+	}
+	if strings.HasSuffix(file, ".versions.toml") {
+		return "Maven"
+	}
+	return ""
 }

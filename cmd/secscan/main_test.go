@@ -190,8 +190,8 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) < 3 || len(got.Scanners) != 8 {
-		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/8", len(got.Findings), len(got.Scanners))
+	if len(got.Findings) < 3 || len(got.Scanners) != 11 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/11", len(got.Findings), len(got.Scanners))
 	}
 }
 
@@ -338,5 +338,42 @@ printf '%s\n' "$SECSCAN_TEST_RESULT"
 		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "all selected scanners failed") {
 			t.Errorf("%s zero analysis: exit=%d stdout=%s stderr=%s", name, code, &stdout, &stderr)
 		}
+	}
+}
+
+func TestDependenciesSkippedWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	selected, err := parseScannerSelection("trivy,grype,osv-scanner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := scan(context.Background(), root, selected, func(progress.Event) {})
+	if err != nil || len(result.Scanners) != 3 {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	for _, scanner := range result.Scanners {
+		if scanner.Status != "skipped" {
+			t.Fatalf("unexpected scanner=%#v", scanner)
+		}
+	}
+}
+
+func TestDependencyUnreadOnlyDoesNotSucceed(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(root, "build.gradle.kts"), []byte(`dependencies { implementation(variable) }`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := scan(context.Background(), root, []string{"osv-scanner"}, func(progress.Event) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Scanners) != 1 || result.Scanners[0].Status != "skipped" || result.Scanners[0].Coverage.Read != 0 || len(result.Scanners[0].Coverage.UnreadInputs) != 1 {
+		t.Fatalf("unread-only result=%#v", result)
 	}
 }

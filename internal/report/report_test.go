@@ -2,6 +2,8 @@ package report
 
 import (
 	"bytes"
+	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -59,5 +61,41 @@ func TestMarshalSortsScanners(t *testing.T) {
 		bytes.Index(got, []byte(`"name":"python-sast"`)) >
 			bytes.Index(got, []byte(`"name":"typescript-sast"`)) {
 		t.Fatalf("Marshal() scanners are not sorted: %s", got)
+	}
+}
+
+func TestDependencyAliasMergeTransitiveAndStable(t *testing.T) {
+	input := []Finding{
+		{Kind: "dependency", Package: &Package{Ecosystem: "npm", Name: "lodash", Version: "1"}, Advisories: []string{"CVE-2026-1"}, Sources: []string{"trivy"}, Locations: []Location{{Path: "a/package-lock.json", Line: 1}}},
+		{Kind: "dependency", Package: &Package{Ecosystem: "npm", Name: "lodash", Version: "1", PURL: "pkg:npm/lodash@1"}, Advisories: []string{"GHSA-aaaa-bbbb-cccc"}, Sources: []string{"grype"}, Locations: []Location{{Path: "b/package-lock.json", Line: 1}}},
+		{Kind: "dependency", Package: &Package{Ecosystem: "npm", Name: "lodash", Version: "1"}, Advisories: []string{"CVE-2026-1", "GHSA-aaaa-bbbb-cccc"}, Sources: []string{"osv-scanner"}, Locations: []Location{{Path: "a/package-lock.json", Line: 1}}},
+		{Kind: "dependency", Package: &Package{Ecosystem: "npm", Name: "lodash", Version: "2"}, Advisories: []string{"CVE-2026-1"}, Sources: []string{"trivy"}, Locations: []Location{{Path: "c/package-lock.json", Line: 1}}},
+	}
+	first, err := Marshal(Report{Findings: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result Report
+	if err := json.Unmarshal(first, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Findings) != 2 {
+		t.Fatalf("merged findings=%#v, want two package versions", result.Findings)
+	}
+	for _, f := range result.Findings {
+		if f.Package.Version == "1" && (len(f.Sources) != 3 || len(f.Advisories) != 2 || len(f.Locations) != 2 || f.Package.PURL != "pkg:npm/lodash@1") {
+			t.Errorf("merged finding=%#v", f)
+		}
+	}
+	slices.Reverse(input)
+	second, err := Marshal(Report{Findings: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatalf("merge is order dependent: %s\n%s", first, second)
+	}
+	if len(input[1].Sources) != 1 {
+		t.Fatal("Marshal mutated input")
 	}
 }
