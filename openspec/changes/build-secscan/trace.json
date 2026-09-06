@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.10",
-  "baselineCommit": "0142d3cc38fff8eb3fef0dcdbd2603b442d2513e",
+  "targetOutcome": "secscan-ij8.11",
+  "baselineCommit": "e188874c2a3b69dec29cc49d108743ec27949694",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -22,7 +22,10 @@
       "scanner/opengrep/",
       "LICENSES/",
       "internal/scanner/",
-      "scanner/cppcheck/"
+      "scanner/cppcheck/",
+      "licenses.go",
+      "licenses_test.go",
+      ".github/"
     ],
     "governance": [
       "cmd/tracecheck/",
@@ -35,7 +38,9 @@
       "openspec/changes/build-secscan/README.md",
       "THIRD_PARTY_NOTICES.md",
       "README.md",
-      "CLAUDE.md"
+      "CLAUDE.md",
+      "LICENSE",
+      "docs/"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -775,6 +780,79 @@
         "cmd/secscan/main_test.go",
         "internal/orchestrator/orchestrator_test.go"
       ]
+    },
+    {
+      "requirement": "Open-source distribution",
+      "scenario": "Public module and licensing",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go",
+        "licenses.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go",
+        "licenses_test.go"
+      ]
+    },
+    {
+      "requirement": "Open-source distribution",
+      "scenario": "Release identity",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go",
+        "licenses.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go",
+        "licenses_test.go"
+      ]
+    },
+    {
+      "requirement": "Continuous verification and releases",
+      "scenario": "Pull request and branch checks",
+      "disposition": "target",
+      "components": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "tests": [
+        ".github/scripts/check.sh"
+      ]
+    },
+    {
+      "requirement": "Continuous verification and releases",
+      "scenario": "Portable trace validation",
+      "disposition": "target",
+      "components": [
+        "cmd/tracecheck/main.go",
+        "internal/tracecheck/tracecheck.go"
+      ],
+      "tests": [
+        "internal/tracecheck/tracecheck_test.go"
+      ]
+    },
+    {
+      "requirement": "Continuous verification and releases",
+      "scenario": "Binary release",
+      "disposition": "target",
+      "components": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "tests": [
+        ".github/scripts/check.sh"
+      ]
+    },
+    {
+      "requirement": "GRACE pilot evaluation",
+      "scenario": "Evidence-based assessment",
+      "disposition": "target",
+      "components": [
+        "docs/grace-pilot.md"
+      ],
+      "tests": [
+        "internal/tracecheck/tracecheck_test.go"
+      ]
     }
   ],
   "checks": {
@@ -807,31 +885,22 @@
     ],
     "target": [
       {
-        "name": "native-integration-tests",
+        "name": "publication-focused",
         "argv": [
           "go",
           "test",
-          "./internal/scanner",
-          "./internal/report",
-          "./internal/discovery",
-          "./internal/container",
-          "./internal/progress",
-          "./cmd/secscan"
+          "./cmd/secscan",
+          "./cmd/tracecheck",
+          "./internal/tracecheck",
+          "."
         ]
       },
       {
-        "name": "native-integration-acceptance",
+        "name": "workflow-lint",
         "argv": [
-          "go",
-          "test",
-          "./internal/scanner",
-          "./internal/container",
-          "-run",
-          "TestAcceptance(Native|OCI|Cancellation)",
-          "-count=1"
-        ],
-        "env": [
-          "SECSCAN_ACCEPTANCE=1"
+          "actionlint",
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml"
         ]
       }
     ],

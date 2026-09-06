@@ -451,3 +451,47 @@ requirements, реализующими components и подтверждающи�
 - **WHEN** существует versions.properties
 - **THEN** refresh-versions читает только файл и существующие update comments
 - **AND** сообщает configuration findings, не заявляя vulnerability coverage
+
+### Requirement: Open-source distribution
+
+Система SHALL публиковаться в public sagolubev/secscan с MIT для собственного кода и сохранением third-party notices.
+
+#### Scenario: Public module and licensing
+- **WHEN** пользователь получает исходники или бинарник
+- **THEN** canonical Go module соответствует github.com/sagolubev/secscan
+- **AND** MIT license и обязательные third-party notices доступны, включая --licenses в standalone executable
+- **AND** внешние scanner engines/rules не перелицензируются и не включаются в release assets
+
+#### Scenario: Release identity
+- **WHEN** пользователь запускает secscan --version
+- **THEN** выводится версия сборки без Git worktree или container runtime
+
+### Requirement: Continuous verification and releases
+
+GitHub Actions SHALL проверять source changes и публиковать release только после успешных gates.
+
+#### Scenario: Pull request and branch checks
+- **WHEN** открыт pull request или отправлен commit в default branch
+- **THEN** выполняются formatting, module integrity, vet, tests/race, workflow validation, trace/staleness checks и сборка Linux/macOS amd64/arm64
+- **AND** реальные container acceptance выполняются на Linux с явными readiness limits для недоступных runtime/platforms
+- **AND** PR jobs не получают write permissions или publish secrets
+
+#### Scenario: Portable trace validation
+- **WHEN** CI проверяет trace manifest в новом checkout
+- **THEN** проверяются exact scenario links, declared full diff scope, Beads authority и artifact staleness
+- **AND** validation-only output не выдаётся за выполненные phase checks/evidence
+
+#### Scenario: Binary release
+- **WHEN** push корректного version tag запускает release workflow
+- **THEN** после gates создаётся GitHub Release с четырьмя single-file executables и SHA256 checksums
+- **AND** release не содержит scanner images, feeds или development tools
+- **AND** загруженные artifacts проверяются на целевых OS и соответствуют version tag
+
+### Requirement: GRACE pilot evaluation
+
+Оценка SHALL опираться на проверенные repository artifacts и разделять verifier, workflow и независимое review.
+
+#### Scenario: Evidence-based assessment
+- **WHEN** подводятся итоги пилота
+- **THEN** документ перечисляет наблюдаемые гарантии, найденные ограничения и стоимость поддержки
+- **AND** измеренные counts отделены от качественных выводов и отсутствующих измерений

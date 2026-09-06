@@ -465,3 +465,33 @@ Walking skeleton не изменяет внешние системы. Rollback �
 - `tracecheck --phase final --run` против полного changed-file set
 - независимый Go/security review записывается в Beads отдельно от command
   evidence
+
+## Open-source release design
+
+Use public sagolubev/secscan and canonical Go module github.com/sagolubev/secscan.
+MIT covers project-owned code; copied skills, Go dependencies and engine recipes
+retain their original notices. Embed the project's license and dependency
+notices in the executable and expose --licenses; --version identifies tag builds.
+Scanner payloads and databases are never GitHub Release assets.
+
+GitHub Actions uses pinned action commits, read-only test jobs and a separate
+contents:write publish job. Pull requests use pull_request, never
+pull_request_target. Format/vet/module/tests/race run on Linux and macOS;
+Linux jobs exercise actual isolated container engines. Four CGO-disabled,
+trimpath binaries target linux/darwin × amd64/arm64. Native OS jobs smoke-test
+the corresponding executable. Tag release reuses the checks, downloads their
+build artifacts and publishes the four raw binaries plus SHA256SUMS.
+
+Add a validation-only tracecheck mode for CI. It reuses existing scenario/scope/
+Beads checks, adds strict validation of the existing .stale.json hashes, and
+emits validation data only. Existing baseline/target/final --run semantics stay
+intact. CI installs pinned br and OpenSpec tooling; no private workstation
+scripts or credentials are required. Native scanner acceptance failures block
+release; unsupported native platforms are disclosed, not reported as verified.
+
+Record the GRACE evaluation in docs/grace-pilot.md. Use Git, br and verifier
+source/tests as evidence; distinguish review-discovered bugs from verifier
+failures. No comparative time/token savings are assumed. Local checks precede
+publication; actual hosted workflow and release assets establish readiness.
+Rollback is additive corrective commits/releases; do not rewrite the existing
+project history or replace a released asset silently.

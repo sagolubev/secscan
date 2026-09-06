@@ -18,6 +18,15 @@
 - Реализовать оставшиеся personas шестью проверяемыми outcomes: preparation, CI, IaC, dependencies, SAST, static Gradle/OCI.
 - Использовать Bearer только из upstream image на amd64; на arm64 сообщать skipped. Semgrep использует собственные MIT rules и upstream runtime image без redistribution.
 
+## Open-source publication
+
+Publish the project as public `sagolubev/secscan` under MIT for project-owned
+code. Preserve third-party licenses. GitHub Actions must check source,
+traceability, real scanner boundaries and four standalone build targets.
+Tag releases publish only the secscan executables and checksum metadata;
+scanner engines/databases remain explicit runtime downloads. Assess the GRACE
+pilot from repository evidence without claiming unmeasured time savings.
+
 ## Capabilities
 
 ### New Capabilities
