@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.6",
-  "baselineCommit": "90a907f2b6fb204ae6b41fce96d1f72a9ae5617e",
+  "targetOutcome": "secscan-ij8.7",
+  "baselineCommit": "0e9ddab448a1f9524916569b31e03180cf8c4dc4",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -568,14 +568,28 @@
     {
       "requirement": "IaC scanners",
       "scenario": "Separate Checkov scopes",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.7"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/iac.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/iac_test.go",
+        "cmd/secscan/main_test.go"
+      ]
     },
     {
       "requirement": "IaC scanners",
       "scenario": "KICS analysis",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.7"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/iac.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/iac_test.go",
+        "cmd/secscan/main_test.go"
+      ]
     },
     {
       "requirement": "Dependency scanners",
@@ -662,7 +676,7 @@
     ],
     "target": [
       {
-        "name": "ci-scanner-tests",
+        "name": "iac-scanner-tests",
         "argv": [
           "go",
           "test",
@@ -672,13 +686,13 @@
         ]
       },
       {
-        "name": "ci-acceptance",
+        "name": "iac-acceptance",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
           "-run",
-          "TestAcceptanceCI",
+          "TestAcceptanceIaC",
           "-count=1"
         ],
         "env": [
