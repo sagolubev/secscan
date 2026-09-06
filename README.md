@@ -12,6 +12,37 @@ Secscan запускает проверки безопасности локал�
 
 ## Установка
 
+Установить последний стабильный релиз:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh | sh
+```
+
+Скрипт определит Linux/macOS и архитектуру, проверит SHA256 и установит
+`secscan` в `~/.local/bin`. Для установки не нужны `sudo`, Go или Docker.
+Повторный запуск обновит бинарник. При ошибке скачивания или проверки прежний
+бинарник останется на месте.
+
+Чтобы выбрать версию и каталог:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh | \
+  sh -s -- --version v0.2.0 --dir "$HOME/.local/bin"
+```
+
+Если `~/.local/bin` ещё не входит в PATH, добавьте его в текущем терминале:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+secscan --version
+```
+
+Для новых терминалов сохраните строку `export PATH=...` в `~/.zshrc` или
+`~/.bashrc`. Сам installer не меняет настройки shell.
+
+<details>
+<summary>Ручная установка без скрипта</summary>
+
 В [релизе v0.2.0](https://github.com/sagolubev/secscan/releases/tag/v0.2.0)
 выберите файл для своей системы:
 
@@ -62,6 +93,8 @@ secscan --version
 
 `secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
 Оба информационных флага работают без Git-репозитория и Docker.
+
+</details>
 
 ## Первый запуск
 
