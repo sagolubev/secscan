@@ -49,6 +49,7 @@
 - **WHEN** несколько применимых scanners выбраны
 - **THEN** они выполняются параллельно с ограниченной concurrency
 - **AND** timeout и cancellation применяются независимо к каждому scanner
+- **AND** cancellation завершает и удаляет принадлежащий run контейнер, не затрагивая чужие containers
 
 #### Scenario: Partial failure
 - **WHEN** один scanner завершается ошибкой, но другой scanner успешен
@@ -95,10 +96,16 @@
 Система SHALL показывать scanner progress в stderr без изменения JSON stdout.
 
 #### Scenario: Interactive dashboard
-- **WHEN** stderr является TTY, `TERM` не равен `dumb` и progress mode равен `auto` или `tty`
+- **WHEN** stderr является TTY, `TERM` не равен `dumb`, progress mode равен `auto` или `tty` и scanner rows помещаются в окно
 - **THEN** secscan перерисовывает фиксированный dashboard со строкой на каждый scanner
 - **AND** строка показывает текущую stage, elapsed-time bar, findings count и итоговый status
 - **AND** завершение или ошибка восстанавливают cursor и оставляют финальный dashboard видимым
+
+#### Scenario: Terminal height
+- **WHEN** полный набор scanner rows помещается в TTY, но журнал превышает доступную высоту
+- **THEN** видимый журнал сокращается так, чтобы dashboard помещался в окно без потери scanner rows
+- **WHEN** окно слишком мало для scanner rows
+- **THEN** progress переключается на plain events с восстановленным cursor
 
 #### Scenario: Plain progress
 - **WHEN** stderr не является TTY, `TERM=dumb` или progress mode равен `plain`

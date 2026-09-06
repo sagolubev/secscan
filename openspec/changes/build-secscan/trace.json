@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.9",
-  "baselineCommit": "8fc8e7b1c0e02bc7303c717fe104faf2900feddf",
+  "targetOutcome": "secscan-ij8.10",
+  "baselineCommit": "0142d3cc38fff8eb3fef0dcdbd2603b442d2513e",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -33,7 +33,8 @@
       "openspec/changes/build-secscan/.stale.json",
       "openspec/changes/build-secscan/proposal.md",
       "openspec/changes/build-secscan/README.md",
-      "THIRD_PARTY_NOTICES.md"
+      "THIRD_PARTY_NOTICES.md",
+      "README.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -95,10 +96,12 @@
       "scenario": "Parallel execution",
       "disposition": "target",
       "components": [
-        "internal/orchestrator/orchestrator.go"
+        "internal/orchestrator/orchestrator.go",
+        "internal/container/runtime.go"
       ],
       "tests": [
-        "internal/orchestrator/orchestrator_test.go"
+        "internal/orchestrator/orchestrator_test.go",
+        "internal/container/runtime_test.go"
       ]
     },
     {
@@ -285,14 +288,26 @@
     {
       "requirement": "OCI image scanning",
       "scenario": "Explicit consent",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/oci.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/oci_test.go"
+      ]
     },
     {
       "requirement": "OCI image scanning",
       "scenario": "Image ownership",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/oci.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/oci_test.go"
+      ]
     },
     {
       "requirement": "Report rendering",
@@ -511,8 +526,14 @@
     {
       "requirement": "OCI image scanning",
       "scenario": "OCI archive boundary",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.10"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/oci.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/oci_test.go"
+      ]
     },
     {
       "requirement": "Scanner preparation",
@@ -684,20 +705,38 @@
     {
       "requirement": "Static Gradle analysis",
       "scenario": "Catalog coordinates",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.10"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/native.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/native_test.go"
+      ]
     },
     {
       "requirement": "Static Gradle analysis",
       "scenario": "Script coordinates",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.10"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/native.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/native_test.go"
+      ]
     },
     {
       "requirement": "Static Gradle analysis",
       "scenario": "Refresh versions metadata",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.10"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/native.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/native_test.go"
+      ]
     },
     {
       "requirement": "Additional code scanners",
@@ -709,6 +748,17 @@
       ],
       "tests": [
         "internal/scanner/code_test.go"
+      ]
+    },
+    {
+      "requirement": "Progress presentation",
+      "scenario": "Terminal height",
+      "disposition": "target",
+      "components": [
+        "internal/progress/live.go"
+      ],
+      "tests": [
+        "internal/progress/progress_test.go"
       ]
     }
   ],
@@ -742,26 +792,27 @@
     ],
     "target": [
       {
-        "name": "code-scanner-tests",
+        "name": "native-integration-tests",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
           "./internal/report",
           "./internal/discovery",
-          "./internal/opengrep",
           "./internal/container",
+          "./internal/progress",
           "./cmd/secscan"
         ]
       },
       {
-        "name": "code-scanner-acceptance",
+        "name": "native-integration-acceptance",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
+          "./internal/container",
           "-run",
-          "TestAcceptanceCodeScanners",
+          "TestAcceptance(Native|OCI|Cancellation)",
           "-count=1"
         ],
         "env": [

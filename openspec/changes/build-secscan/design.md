@@ -392,7 +392,22 @@ Trivy and Grype consume this archive without a socket; finally removes only
 images newly loaded by this run. Preserve pre-existing images on every exit,
 including cancellation. Scanner metadata records the host-network capability.
 
-### 17. Delivery boundaries
+### 17. Full-roster runtime integration
+
+A real 18-job render produced 27 lines. TTY rendering therefore budgets recent
+log lines from the actual terminal height while preserving every scanner row.
+When even scanner rows cannot fit, it restores the cursor and switches to the
+existing plain reporter. JSON stdout is unchanged. Terminal resize and empty
+state are covered by focused rendering checks and a PTY run.
+
+A real canceled Docker client left its started container running. The common
+runtime assigns an unpredictable owned container name before every scanner
+run and removes that container with a separate bounded cleanup context after
+cancellation. It does not remove arbitrary user containers. All run/output
+entrypoints share this cleanup; tests verify the daemon state, not only client
+exit. OCI target-image ownership remains a separate guard in the image adapter.
+
+### 18. Delivery boundaries
 
 Beads owns six outcomes: preparation, CI, IaC, dependencies, additional SAST,
 and static Gradle/OCI. Every outcome depends on the proven Gitleaks skeleton;
