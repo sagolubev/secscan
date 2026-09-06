@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/report"
 	"go.yaml.in/yaml/v3"
 )
 

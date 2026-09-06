@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	scannerassets "github.com/sigiuscom/secscan/scanner/opengrep/assets"
+	scannerassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
 )
 
 type fakeImageRuntime struct {

@@ -95,6 +95,9 @@ func AuthorityHash(root, outcome, epic, change string) (string, error) {
 
 func RunChecks(ctx context.Context, root string, checks []Check) ([]CheckResult, bool) {
 	results := make([]CheckResult, 0, len(checks))
+	if len(checks) == 0 {
+		return results, false
+	}
 	for _, check := range checks {
 		started := time.Now()
 		result := CheckResult{

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/discovery"
 )
 
 func dependencyUpdateArgs(name, imageID, dir string) []string {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/container"
 )
 
 func TestAcceptanceCancellation(t *testing.T) {

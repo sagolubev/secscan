@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 const Image = "ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f"

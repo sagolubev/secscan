@@ -11,10 +11,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/discovery"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 var ciRule = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)

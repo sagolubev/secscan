@@ -233,6 +233,12 @@ func TestRunChecksStopsAfterFailure(t *testing.T) {
 	}
 }
 
+func TestRunChecksRejectsEmptyPhase(t *testing.T) {
+	if results, ok := RunChecks(context.Background(), ".", nil); ok || len(results) != 0 {
+		t.Errorf("RunChecks(empty) = %#v, %t; want no results and failure", results, ok)
+	}
+}
+
 func TestRunChecksRejectsUnexpectedStdout(t *testing.T) {
 	checks := []Check{{
 		Name:               "format",

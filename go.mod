@@ -1,4 +1,4 @@
-module github.com/sigiuscom/secscan
+module github.com/sagolubev/secscan
 
 go 1.24.0
 

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/progress"
 )
 
 type fakeRunner struct {

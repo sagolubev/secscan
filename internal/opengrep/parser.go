@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 type scanResult struct {

@@ -2,8 +2,8 @@ package scanner
 
 import (
 	"context"
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/progress"
 	"os"
 	"os/exec"
 	"path/filepath"

@@ -12,10 +12,47 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sigiuscom/secscan/internal/orchestrator"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/orchestrator"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
 )
+
+func TestInformationFlagsWithoutRepositoryOrRuntime(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("PATH", "")
+	for _, test := range []struct {
+		flag string
+		want string
+	}{
+		{flag: "--version", want: "secscan dev\n"},
+		{flag: "--licenses", want: "MIT License"},
+	} {
+		t.Run(test.flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(context.Background(), []string{test.flag}, &stdout, &stderr, nil)
+			if code != 0 || !strings.Contains(stdout.String(), test.want) || stderr.Len() != 0 {
+				t.Fatalf("run(%s) exit=%d stdout=%q stderr=%q", test.flag, code, &stdout, &stderr)
+			}
+		})
+	}
+}
+
+func TestInformationFlagsRejectScanAndUpdateArguments(t *testing.T) {
+	for _, args := range [][]string{
+		{"--version", "--licenses"},
+		{"--version", "."},
+		{"--licenses", "--scanners", "all"},
+		{"--version", "--progress", "auto"},
+		{"--licenses", "--scan-images=false"},
+		{"update", "--version"},
+		{"update", "--licenses"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(context.Background(), args, &stdout, &stderr, nil); code != 2 || stdout.Len() != 0 {
+			t.Errorf("run(%q) exit=%d stdout=%q, want exit 2 and no output", args, code, &stdout)
+		}
+	}
+}
 
 func TestRunWritesOneJSONDocument(t *testing.T) {
 	var stdout bytes.Buffer

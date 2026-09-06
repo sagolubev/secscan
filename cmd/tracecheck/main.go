@@ -6,105 +6,145 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/tracecheck"
+	"github.com/sagolubev/secscan/internal/tracecheck"
 )
 
 func main() {
-	os.Exit(run())
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func run() int {
-	manifestPath := flag.String(
+func run(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("tracecheck", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	manifestPath := flags.String(
 		"manifest",
 		"openspec/changes/build-secscan/trace.json",
 		"trace manifest path",
 	)
-	phase := flag.String("phase", "", "verification phase: baseline, target, or final")
-	runChecks := flag.Bool("run", false, "run the phase checks")
-	flag.Parse()
-
-	if *phase != "baseline" && *phase != "target" && *phase != "final" {
-		fmt.Fprintln(os.Stderr, "phase must be baseline, target, or final")
+	phase := flags.String("phase", "", "verification phase: baseline, target, or final")
+	runChecks := flags.Bool("run", false, "run the phase checks")
+	validateOnly := flags.Bool("validate-only", false, "validate trace, scope, authority and staleness without running checks")
+	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if !*runChecks {
-		fmt.Fprintln(os.Stderr, "--run is required to produce evidence")
+	conflict := false
+	if *validateOnly {
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name == "phase" || f.Name == "run" {
+				conflict = true
+			}
+		})
+	}
+	if flags.NArg() != 0 || conflict || !*validateOnly && (!*runChecks || (*phase != "baseline" && *phase != "target" && *phase != "final")) {
+		fmt.Fprintln(stderr, "use --validate-only alone, or --phase baseline|target|final --run")
 		return 2
 	}
 
 	root, err := repositoryRoot()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	manifest, err := tracecheck.LoadManifest(filepath.Join(root, *manifestPath))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	spec, err := os.Open(filepath.Join(root, manifest.Spec))
+	if !*validateOnly && len(manifest.Checks[*phase]) == 0 {
+		fmt.Fprintf(stderr, "phase %q requires at least one check\n", *phase)
+		return 1
+	}
+	before, err := validate(root, manifest, *validateOnly || *phase != "baseline")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	refs, err := tracecheck.ParseScenarios(spec)
-	spec.Close()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	if err := tracecheck.ValidateTrace(root, manifest, refs, *phase != "baseline"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-
-	changes, err := tracecheck.Changes(root, manifest.BaselineCommit)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	if err := tracecheck.ValidateScope(manifest.Scope, changes); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	identity, err := tracecheck.StateIdentity(root, manifest.BaselineCommit, manifest.Scope, changes)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	authority, err := tracecheck.AuthorityHash(root, manifest.TargetOutcome, manifest.Epic, manifest.Change)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+	if *validateOnly {
+		if err := json.NewEncoder(stdout).Encode(before); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	results, ok := tracecheck.RunChecks(ctx, root, manifest.Checks[*phase])
+	after, err := validate(root, manifest, *phase != "baseline")
+	if err != nil {
+		fmt.Fprintf(stderr, "verification state changed during checks: %v\n", err)
+		ok = false
+	} else if before.StateIdentity != after.StateIdentity || before.AuthorityHash != after.AuthorityHash {
+		fmt.Fprintln(stderr, "verification state or Beads authority changed during checks")
+		ok = false
+	}
 	evidence := tracecheck.Evidence{
 		SchemaVersion: "1",
 		Phase:         *phase,
 		Baseline:      manifest.BaselineCommit,
 		Outcome:       manifest.TargetOutcome,
-		StateIdentity: identity,
-		AuthorityHash: authority,
-		Changes:       changes,
+		StateIdentity: before.StateIdentity,
+		AuthorityHash: before.AuthorityHash,
+		Changes:       before.Changes,
 		Checks:        results,
 		OK:            ok,
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(evidence); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := json.NewEncoder(stdout).Encode(evidence); err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if !ok {
 		return 1
 	}
 	return 0
+}
+
+type validation struct {
+	SchemaVersion string              `json:"schemaVersion"`
+	Mode          string              `json:"mode"`
+	Baseline      string              `json:"baselineCommit"`
+	Outcome       string              `json:"targetOutcome"`
+	StateIdentity string              `json:"stateIdentity"`
+	AuthorityHash string              `json:"authorityHash"`
+	Changes       []tracecheck.Change `json:"changes"`
+}
+
+func validate(root string, manifest tracecheck.Manifest, requirePaths bool) (validation, error) {
+	result := validation{SchemaVersion: "1", Mode: "validation-only", Baseline: manifest.BaselineCommit, Outcome: manifest.TargetOutcome}
+	spec, err := os.Open(filepath.Join(root, manifest.Spec))
+	if err != nil {
+		return result, err
+	}
+	refs, err := tracecheck.ParseScenarios(spec)
+	spec.Close()
+	if err != nil {
+		return result, err
+	}
+	if err := tracecheck.ValidateTrace(root, manifest, refs, requirePaths); err != nil {
+		return result, err
+	}
+	if err := tracecheck.ValidateStaleness(filepath.Join(root, "openspec", "changes", manifest.Change)); err != nil {
+		return result, err
+	}
+	result.Changes, err = tracecheck.Changes(root, manifest.BaselineCommit)
+	if err != nil {
+		return result, err
+	}
+	if err := tracecheck.ValidateScope(manifest.Scope, result.Changes); err != nil {
+		return result, err
+	}
+	result.StateIdentity, err = tracecheck.StateIdentity(root, manifest.BaselineCommit, manifest.Scope, result.Changes)
+	if err != nil {
+		return result, err
+	}
+	result.AuthorityHash, err = tracecheck.AuthorityHash(root, manifest.TargetOutcome, manifest.Epic, manifest.Change)
+	return result, err
 }
 
 func repositoryRoot() (string, error) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 func TestContainerArgsEnforceSecurityBoundary(t *testing.T) {

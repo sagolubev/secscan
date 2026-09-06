@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 // TargetPath validates a scanner URI within its staged /target or /repo mount.

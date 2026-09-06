@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/report"
 )
 
 func parseOCIOutput(data []byte, name, configID, digest string, locations []report.Location) ([]report.Finding, int, error) {

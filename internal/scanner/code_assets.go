@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	cppassets "github.com/sigiuscom/secscan/scanner/cppcheck"
+	"github.com/sagolubev/secscan/internal/container"
+	cppassets "github.com/sagolubev/secscan/scanner/cppcheck"
 )
 
 const (

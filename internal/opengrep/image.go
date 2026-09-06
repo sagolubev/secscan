@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	scannerassets "github.com/sigiuscom/secscan/scanner/opengrep/assets"
+	"github.com/sagolubev/secscan/internal/container"
+	scannerassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
 )
 
 const (

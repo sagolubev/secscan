@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/discovery"
-	"github.com/sigiuscom/secscan/internal/gitleaks"
-	"github.com/sigiuscom/secscan/internal/opengrep"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/gitleaks"
+	"github.com/sagolubev/secscan/internal/opengrep"
 )
 
 // Update prepares selected engines and feeds required by repository inputs.

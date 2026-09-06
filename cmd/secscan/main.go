@@ -15,18 +15,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/discovery"
-	"github.com/sigiuscom/secscan/internal/gitleaks"
-	"github.com/sigiuscom/secscan/internal/opengrep"
-	"github.com/sigiuscom/secscan/internal/orchestrator"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
-	"github.com/sigiuscom/secscan/internal/scanner"
+	"github.com/sagolubev/secscan"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/gitleaks"
+	"github.com/sagolubev/secscan/internal/opengrep"
+	"github.com/sagolubev/secscan/internal/orchestrator"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/scanner"
 	"golang.org/x/term"
 )
 
 type scanFunc func(context.Context, string, []string, func(progress.Event)) (report.Report, error)
+
+var version = "dev"
 
 func main() {
 	signalContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -44,11 +47,33 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	flags := flag.NewFlagSet("secscan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	showVersion := flags.Bool("version", false, "print build version")
+	showLicenses := flags.Bool("licenses", false, "print project and third-party license notices")
 	scanImages := flags.Bool("scan-images", false, "authorize host runtime image pulls and offline archive scans")
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
 		return 2
+	}
+	if *showVersion || *showLicenses {
+		if updating || flags.NArg() != 0 || flags.NFlag() != 1 {
+			fmt.Fprintln(stderr, "--version and --licenses must be used alone")
+			return 2
+		}
+		text := "secscan " + version + "\n"
+		if *showLicenses {
+			var err error
+			text, err = secscan.Licenses()
+			if err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
+		if _, err := io.WriteString(stdout, text); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	}
 	progressMode, err := progress.ParseMode(*progressValue)
 	if err != nil {

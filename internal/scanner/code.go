@@ -12,12 +12,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sigiuscom/secscan/internal/container"
-	"github.com/sigiuscom/secscan/internal/discovery"
-	"github.com/sigiuscom/secscan/internal/opengrep"
-	"github.com/sigiuscom/secscan/internal/progress"
-	"github.com/sigiuscom/secscan/internal/report"
-	ruleassets "github.com/sigiuscom/secscan/scanner/opengrep/assets"
+	"github.com/sagolubev/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/opengrep"
+	"github.com/sagolubev/secscan/internal/progress"
+	"github.com/sagolubev/secscan/internal/report"
+	ruleassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
 )
 
 // RuntimeArchitecture reads the container server architecture, including remote servers.

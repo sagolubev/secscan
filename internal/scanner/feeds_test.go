@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"github.com/sigiuscom/secscan/internal/container"
+	"github.com/sagolubev/secscan/internal/container"
 	"net/http"
 	"net/http/httptest"
 	"os"
