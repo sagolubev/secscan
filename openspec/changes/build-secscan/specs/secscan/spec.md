@@ -241,6 +241,12 @@
 - **WHEN** image существовал до run
 - **THEN** secscan его не удаляет
 
+#### Scenario: OCI archive boundary
+- **WHEN** передан --scan-images и обнаружен literal image reference
+- **THEN** host runtime экспортирует image archive для Trivy и Grype
+- **AND** scanner containers не получают container socket
+- **AND** network capability и image digest отражены в evidence
+
 ### Requirement: Report rendering
 
 Система SHALL строить JSON v1, offline HTML и SARIF 2.1.0 из одной immutable canonical scan model.
@@ -317,3 +323,110 @@ requirements, реализующими components и подтверждающи�
 - **THEN** каждый добавленный, изменённый, удалённый или переименованный файл входит в declared implementation scope, governance scope или evidence sinks
 - **AND** для переименования scope проверяет исходный и целевой paths
 - **AND** выход за scope завершает проверку ошибкой с перечислением путей
+
+### Requirement: Scanner preparation
+
+Система SHALL отделять разрешённые загрузки от offline scan командой `secscan update [--scanners ...] [path]`.
+
+#### Scenario: Atomic preparation
+- **WHEN** update успешно загружает pinned images и необходимые databases
+- **THEN** публикуется manifest с immutable image IDs, content digests и временем подготовки
+- **AND** ошибка или interruption оставляет предыдущий manifest и snapshots пригодными для scan
+
+#### Scenario: Offline scan
+- **WHEN** запускается обычный scan
+- **THEN** image pull, image build, version checks и database downloads запрещены
+- **AND** отсутствие image или требуемого database snapshot даёт failed coverage и actionable diagnostic
+
+#### Scenario: Feed integrity and freshness
+- **WHEN** dependency scanner открывает database snapshot
+- **THEN** проверяются digest и возраст не более пяти суток
+- **AND** испорченный, отсутствующий или просроченный snapshot не считается успешной проверкой
+
+### Requirement: CI scanners
+
+Система SHALL выполнять Zizmor и Poutine только над локальными CI definitions.
+
+#### Scenario: Local CI analysis
+- **WHEN** Git inventory содержит поддерживаемые CI definitions
+- **THEN** Zizmor и Poutine запускаются offline в hardened containers
+- **AND** canonical findings содержат rule, severity и one-based location без source snippets
+
+#### Scenario: Offline CI limitations
+- **WHEN** Zizmor выполняется без API access
+- **THEN** coverage явно указывает исключение online audits
+- **AND** отсутствие подходящих CI files даёт skipped, не success
+
+### Requirement: IaC scanners
+
+Система SHALL поддерживать Checkov, Checkov Terraform и KICS.
+
+#### Scenario: Separate Checkov scopes
+- **WHEN** выбран Checkov
+- **THEN** persona checkov-terraform анализирует Terraform, OpenTofu и Terraform plans
+- **AND** persona checkov исключает эти frameworks и remote-only checks
+- **AND** external modules и policy downloads выключены
+
+#### Scenario: KICS analysis
+- **WHEN** repository содержит поддерживаемые IaC files
+- **THEN** KICS использует pinned upstream v2.1.20 image и embedded queries
+- **AND** failed files или queries отражены в coverage
+
+### Requirement: Dependency scanners
+
+Система SHALL поддерживать Trivy, Grype и OSV-Scanner с локальными advisory snapshots.
+
+#### Scenario: Offline dependency findings
+- **WHEN** repository содержит поддерживаемые manifests или lockfiles
+- **THEN** dependency scanners читают только локальные inputs и подготовленные feeds
+- **AND** findings содержат package identity, version, advisory IDs и source locations
+
+#### Scenario: Advisory alias merge
+- **WHEN** разные scanners связывают одну package version с пересекающимися advisory aliases
+- **THEN** report объединяет findings транзитивно, сохраняя aliases, sources и locations
+- **AND** различающиеся package versions не объединяются
+
+#### Scenario: Partial extraction
+- **WHEN** scanner не может прочитать manifest или требует отсутствующий ecosystem feed
+- **THEN** input отражается как unread или failed
+- **AND** пустой JSON от аварийно завершившегося scanner не считается успешным анализом
+
+### Requirement: Additional code scanners
+
+Система SHALL поддерживать Semgrep, Bearer и Cppcheck.
+
+#### Scenario: Semgrep rules and merge
+- **WHEN** Semgrep сканирует Python или TypeScript
+- **THEN** он использует тот же project-owned MIT rule pack, что Opengrep
+- **AND** одинаковые findings объединяются со списком обоих source engines
+
+#### Scenario: Bearer architecture
+- **WHEN** runtime architecture равна amd64 и есть поддерживаемый source input
+- **THEN** используется pinned upstream Bearer image без redistribution
+- **WHEN** runtime architecture не поддерживается
+- **THEN** Bearer получает skipped с явной причиной без emulation
+
+#### Scenario: Cppcheck source build
+- **WHEN** выбран Cppcheck и есть C/C++ files
+- **THEN** scan использует project-owned image из закреплённого upstream source
+- **AND** source hash, license и build recipe доступны вместе с image
+- **AND** scan не запускает build scripts проверяемого проекта
+
+### Requirement: Static Gradle analysis
+
+Система SHALL анализировать Gradle metadata без выполнения Groovy, Kotlin или Gradle wrapper.
+
+#### Scenario: Catalog coordinates
+- **WHEN** version catalog содержит literal coordinates или разрешимые version references
+- **THEN** gradle-catalog извлекает Maven package inventory для offline vulnerability lookup
+- **AND** unresolved entries учитываются как unread
+
+#### Scenario: Script coordinates
+- **WHEN** build.gradle или build.gradle.kts содержит literal dependency coordinates
+- **THEN** gradle-scripts извлекает их для offline vulnerability lookup
+- **AND** dynamic expressions и plugins не считаются полностью разрешёнными dependencies
+
+#### Scenario: Refresh versions metadata
+- **WHEN** существует versions.properties
+- **THEN** refresh-versions читает только файл и существующие update comments
+- **AND** сообщает configuration findings, не заявляя vulnerability coverage

@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.4",
-  "baselineCommit": "0127a65b5cf56381414804ef95255eccf6f8cff9",
+  "targetOutcome": "secscan-ij8.5",
+  "baselineCommit": "f41a23f2b04f9806c99f7321209d52941432a97c",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -20,7 +20,9 @@
       "internal/opengrep/",
       "internal/orchestrator/",
       "scanner/opengrep/",
-      "LICENSES/"
+      "LICENSES/",
+      "internal/scanner/",
+      "scanner/cppcheck/"
     ],
     "governance": [
       "cmd/tracecheck/",
@@ -494,6 +496,123 @@
       "tests": [
         "cmd/secscan/main_test.go"
       ]
+    },
+    {
+      "requirement": "OCI image scanning",
+      "scenario": "OCI archive boundary",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.10"
+    },
+    {
+      "requirement": "Scanner preparation",
+      "scenario": "Atomic preparation",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/cache.go"
+      ],
+      "tests": [
+        "internal/scanner/cache_test.go"
+      ]
+    },
+    {
+      "requirement": "Scanner preparation",
+      "scenario": "Offline scan",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/cache.go"
+      ],
+      "tests": [
+        "internal/scanner/cache_test.go"
+      ]
+    },
+    {
+      "requirement": "Scanner preparation",
+      "scenario": "Feed integrity and freshness",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/cache.go"
+      ],
+      "tests": [
+        "internal/scanner/cache_test.go"
+      ]
+    },
+    {
+      "requirement": "CI scanners",
+      "scenario": "Local CI analysis",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.6"
+    },
+    {
+      "requirement": "CI scanners",
+      "scenario": "Offline CI limitations",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.6"
+    },
+    {
+      "requirement": "IaC scanners",
+      "scenario": "Separate Checkov scopes",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.7"
+    },
+    {
+      "requirement": "IaC scanners",
+      "scenario": "KICS analysis",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.7"
+    },
+    {
+      "requirement": "Dependency scanners",
+      "scenario": "Offline dependency findings",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.8"
+    },
+    {
+      "requirement": "Dependency scanners",
+      "scenario": "Advisory alias merge",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.8"
+    },
+    {
+      "requirement": "Dependency scanners",
+      "scenario": "Partial extraction",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.8"
+    },
+    {
+      "requirement": "Additional code scanners",
+      "scenario": "Semgrep rules and merge",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.9"
+    },
+    {
+      "requirement": "Additional code scanners",
+      "scenario": "Bearer architecture",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.9"
+    },
+    {
+      "requirement": "Additional code scanners",
+      "scenario": "Cppcheck source build",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.9"
+    },
+    {
+      "requirement": "Static Gradle analysis",
+      "scenario": "Catalog coordinates",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.10"
+    },
+    {
+      "requirement": "Static Gradle analysis",
+      "scenario": "Script coordinates",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.10"
+    },
+    {
+      "requirement": "Static Gradle analysis",
+      "scenario": "Refresh versions metadata",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.10"
     }
   ],
   "checks": {
@@ -526,31 +645,23 @@
     ],
     "target": [
       {
-        "name": "language-sast-tests",
+        "name": "preparation-tests",
         "argv": [
           "go",
           "test",
-          "./internal/discovery",
-          "./internal/opengrep",
-          "./internal/orchestrator",
-          "./internal/report",
-          "./cmd/secscan"
-        ]
-      },
-      {
-        "name": "opengrep-image",
-        "argv": [
-          "sh",
-          "scanner/opengrep/test-image.sh"
-        ]
-      },
-      {
-        "name": "language-acceptance",
-        "argv": [
-          "go",
-          "test",
+          "./internal/scanner",
           "./cmd/secscan",
-          "./internal/opengrep",
+          "./internal/gitleaks",
+          "./internal/opengrep"
+        ]
+      },
+      {
+        "name": "preparation-acceptance",
+        "argv": [
+          "go",
+          "test",
+          "./internal/scanner",
+          "./cmd/secscan",
           "-run",
           "TestAcceptance",
           "-count=1"
@@ -583,36 +694,7 @@
         "argv": [
           "gofmt",
           "-d",
-          "cmd/secscan/main.go",
-          "cmd/secscan/main_test.go",
-          "cmd/tracecheck/main.go",
-          "internal/container/runtime.go",
-          "internal/container/runtime_test.go",
-          "internal/gitleaks/parser.go",
-          "internal/gitleaks/parser_test.go",
-          "internal/gitleaks/run.go",
-          "internal/gitleaks/run_test.go",
-          "internal/report/report.go",
-          "internal/report/report_test.go",
-          "internal/tracecheck/evidence.go",
-          "internal/tracecheck/git.go",
-          "internal/tracecheck/tracecheck.go",
-          "internal/tracecheck/tracecheck_test.go",
-          "internal/progress/progress.go",
-          "internal/progress/plain.go",
-          "internal/progress/live.go",
-          "internal/progress/progress_test.go",
-          "internal/opengrep/image.go",
-          "internal/opengrep/image_test.go",
-          "internal/discovery/discovery.go",
-          "internal/discovery/discovery_test.go",
-          "internal/opengrep/parser.go",
-          "internal/opengrep/parser_test.go",
-          "internal/opengrep/scan.go",
-          "internal/opengrep/scan_test.go",
-          "internal/orchestrator/orchestrator.go",
-          "internal/orchestrator/orchestrator_test.go",
-          "scanner/opengrep/assets/assets.go"
+          "."
         ],
         "requireEmptyStdout": true
       },

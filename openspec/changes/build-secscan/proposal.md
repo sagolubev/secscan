@@ -14,6 +14,9 @@
 - Добавить opt-in LLM brief/explain с обязательным удалением secrets и изоляцией от инструкций сканируемого репозитория.
 - Поддержать headless CI execution без изменения exit code из-за самих findings.
 - Показывать интерактивный scanner dashboard в TTY и стабильные progress events в CI.
+- Добавить explicit `secscan update` для pinned images и атомарных advisory snapshots; обычный scan не выполняет загрузки.
+- Реализовать оставшиеся personas шестью проверяемыми outcomes: preparation, CI, IaC, dependencies, SAST, static Gradle/OCI.
+- Использовать Bearer только из upstream image на amd64; на arm64 сообщать skipped. Semgrep использует собственные MIT rules и upstream runtime image без redistribution.
 
 ## Capabilities
 

@@ -1,22 +1,22 @@
 {
   "version": 1,
-  "updated_at": "2026-09-05T19:51:43Z",
+  "updated_at": "2026-09-06T09:18:58Z",
   "artifacts": {
     "proposal.md": {
-      "sha256": "600801d2eba5e19a88833aacc93bc101996c40607c6443843dfe037c135abbc2",
-      "synced_at": "2026-09-05T19:51:43Z",
+      "sha256": "3c9b1caf2fc2919fa98dd9ca133367133f310dac7b73a0cae800856e9431af4e",
+      "synced_at": "2026-09-06T09:18:58Z",
       "depends_on": []
     },
     "specs/secscan/spec.md": {
-      "sha256": "83faeb3b7912bec700fceaea458c897fcd212148dc1e45dbb473c7898ce342fd",
-      "synced_at": "2026-09-05T19:51:43Z",
+      "sha256": "2c482983558c9d547a57195bfed5b7596c19ea6725d49ccbba39cd56570c1247",
+      "synced_at": "2026-09-06T09:18:58Z",
       "depends_on": [
         "design.md"
       ]
     },
     "design.md": {
-      "sha256": "39a187d14ce86d5715e170f3142e26043ef798071676e3c1c8d0b879ab2eee51",
-      "synced_at": "2026-09-05T19:51:43Z",
+      "sha256": "125866e0f02c286ebd865f6195e594a60cde3019600bdd54601cf730432174ef",
+      "synced_at": "2026-09-06T09:18:58Z",
       "depends_on": [
         "proposal.md"
       ]

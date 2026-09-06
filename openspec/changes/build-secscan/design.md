@@ -17,6 +17,7 @@ repo-local verifier и не создаёт второй lifecycle.
 - Реализовать один реальный Gitleaks scan через Docker или Podman.
 - Реализовать отдельные Python и TypeScript SAST jobs через Opengrep.
 - Показывать live scanner dashboard в TTY и plain events в CI.
+- Добавить все оставшиеся scanner personas на уже проверенной container boundary.
 - Зафиксировать минимальный schema-v1 JSON contract.
 - Удалить secret values и source snippets до выхода из adapter boundary.
 - Проверить security options container invocation без shell interpolation.
@@ -26,7 +27,6 @@ repo-local verifier и не создаёт второй lifecycle.
 
 **Non-Goals:**
 
-- Остальные scanner personas кроме Gitleaks, Python SAST и TypeScript SAST.
 - HTML, SARIF, product baselines, suppressions и LLM analysis.
 - Универсальный workflow framework или совместимость с GRACE CLI.
 - Автоматический запуск команд из недоверенного репозитория.
@@ -67,8 +67,9 @@ directory. Container получает
 `no-new-privileges`, не получает container socket и работает с отключённой
 сетью. Команда строится как argv и запускается через `exec.CommandContext`.
 
-Image pull выполняет runtime до запуска scanner container, если image
-отсутствует. Фактически использованный digest записывается в coverage metadata.
+Image pull выполняется только командой `secscan update`. При scan используется
+`--pull never`; отсутствующий image даёт failed coverage с указанием update.
+Фактически использованный digest записывается в coverage metadata.
 
 Walking skeleton использует `gitleaks dir /repo`: он сканирует working tree и
 не требует монтировать Git common directory, которое у linked worktree может
@@ -269,8 +270,8 @@ findings — по существующему deterministic ключу.
 - не содержит time-varying `RUN` steps в final image и запускается numeric
   non-root UID/GID `65532:65532` из pinned Alpine runtime.
 
-Первый scan строит image локально при его отсутствии и затем запускает scanner
-по immutable local image ID `sha256:...`. Build требует сеть; сами scans
+Команда `secscan update` строит image локально и сохраняет проверенный immutable
+local image ID `sha256:...` в manifest. Build требует сеть; сами scans
 работают с `--network none`. Фактический image ID и engine version попадают в
 coverage metadata. Opengrep получает отдельный ephemeral `/tmp` tmpfs 256 MiB
 с `exec,nosuid,nodev`. Nuitka executable требует исполняемый `/tmp` для распаковки
@@ -307,6 +308,83 @@ path, start/end positions и language metadata. Canonical finding получае
 metavariable values, raw scanner errors и arbitrary rule messages не переходят
 в report или progress. Parse errors называют scanner и field, но не включают
 исходный JSON.
+
+### 14. Prepared scanner assets and immutable feeds
+
+`internal/scanner` contains the finite scanner catalog, isolated argv, local
+preparation manifest and format adapters. It is not a plugin framework.
+`secscan update --scanners ... [path]` resolves pinned upstream images, builds
+project-owned images and prepares only feeds required by discovered ecosystems.
+A temporary generation is populated first; content hashes and metadata are
+published atomically only after every selected preparation succeeds. An old
+manifest remains usable after a failed update. Unselected entries are retained.
+Concurrent update publication must not lose another completed update.
+
+The default cache is the host user cache under `secscan`; it is outside the
+scanned repository. Scan checks required image IDs and feed digests locally,
+uses `--pull never --network none`, and never builds or updates assets.
+Snapshots expire after five days, including upstream database build age where
+available. Scanners receive writable disposable copies when their engines need
+write access. Snapshot digest and acquisition time are included in coverage.
+OSV ecosystems are an allowlist derived from inputs; no repository content is
+sent to the feed server. Missing ecosystems fail coverage.
+
+### 15. Remaining external adapters
+
+Pinned versions: Zizmor 1.30.0, Poutine 1.1.6, Checkov 3.3.16, KICS 2.1.20,
+Trivy 0.74.0, Grype 0.118.0, OSV-Scanner 2.5.1, Semgrep 1.176.0,
+Bearer 2.1.1, Cppcheck 2.21.1. Pins are recorded in the scanner catalog.
+Use the regular KICS 2.1.20 multiarch image; runtime verification showed the
+ubi8 variant is amd64-only. Do not misreport the unavailable 2.1.21 image.
+
+JSON adapters decode only documented structured fields; Cppcheck/Bearer can
+use SARIF. Result messages and snippets are untrusted and are replaced with
+static messages. Paths must resolve inside the staged input tree. Parsing
+failure, tool crash, failed files/queries and missing data remain explicit.
+Safe flags suppress findings exit codes; operational exits remain failures.
+No repository-provided config, custom checks or executable plugins are loaded.
+
+Checkov Terraform includes terraform, terraform_json and terraform_plan;
+general Checkov excludes those and API-only SCA/SAST frameworks. Neither
+fetches external modules. KICS uses embedded queries and no description fetch.
+Zizmor discloses omitted API audits. Applicability is based on Git inventory;
+no matching input is skipped. Semgrep reuses embedded MIT Opengrep rules.
+Bearer runs only on amd64. Semgrep and Bearer images are pulled from upstream
+at runtime preparation and are not redistributed by this project. Semgrep's
+current image labels reference proprietary source; do not label it LGPL-only.
+Cppcheck is built from exact source with GPL source/license/build recipe.
+
+### 16. Dependency identities, Gradle and OCI
+
+Canonical findings gain optional package identity, advisory aliases and
+locations. Dedup uses package ecosystem/name/version (canonical PURL when
+available) plus connected advisory aliases. It merges transitively and sorts
+sources, advisories and locations deterministically. Code findings from the
+shared Semgrep/Opengrep pack merge by rule and location.
+
+Gradle catalogs use a real TOML parser if required by the documented grammar;
+script extraction is deliberately limited to literal coordinates. Dynamic
+expressions, unresolved version references and plugins are disclosed as unread.
+No wrapper, build or project code executes. Extracted Maven inventory is passed
+to the same offline advisory stage. refresh-versions reads existing metadata
+only and labels its result as configuration analysis.
+
+OCI discovery reads literal FROM/image fields from Dockerfiles, Kubernetes and
+Compose. No target registry access occurs without --scan-images. With the flag,
+host runtime records local ownership, resolves/pulls and exports an archive.
+Trivy and Grype consume this archive without a socket; finally removes only
+images newly loaded by this run. Preserve pre-existing images on every exit,
+including cancellation. Scanner metadata records the host-network capability.
+
+### 17. Delivery boundaries
+
+Beads owns six outcomes: preparation, CI, IaC, dependencies, additional SAST,
+and static Gradle/OCI. Every outcome depends on the proven Gitleaks skeleton;
+adapters also depend on preparation and Gradle/OCI depends on dependencies.
+Each outcome carries baseline, target and final trace evidence and independent
+review before closure. Revert its Conventional Commits to roll back; cached
+snapshots are additive and prior manifests survive failed updates. Existing
+Gitleaks/Opengrep users run secscan update once after this compatibility change.
 
 ## Risks / Trade-offs
 
