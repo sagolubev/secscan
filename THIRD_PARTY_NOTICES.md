@@ -32,3 +32,11 @@ Cppcheck 2.21.1 is built locally from pinned source during update. Its embedded
 recipe includes the matching GPL source archive, license, build recipe and
 runtime license notices in the resulting image. See
 [Cppcheck notices](scanner/cppcheck/THIRD_PARTY_NOTICES.md).
+
+## Go TOML v2.2.4
+
+Secscan uses `github.com/pelletier/go-toml/v2` to parse static Gradle version
+catalogs. Go's standard library has no TOML parser.
+
+- Source: https://github.com/pelletier/go-toml/tree/v2.2.4
+- License: MIT, retained in [LICENSE](LICENSES/go-toml-LICENSE.txt).

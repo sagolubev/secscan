@@ -231,3 +231,15 @@ func TestCodeScannerInventory(t *testing.T) {
 		t.Fatalf("code inventory=%#v", got)
 	}
 }
+
+func TestNativeOCIInventory(t *testing.T) {
+	root := newGitRepository(t)
+	for _, file := range []string{"versions.properties", "Dockerfile", "pod.yaml", "compose.yml", "ignored/Dockerfile"} {
+		writeFile(t, root, file, "synthetic")
+	}
+	writeFile(t, root, ".gitignore", "ignored/\n")
+	got, err := Discover(root)
+	if err != nil || len(got.Native) != 1 || len(got.OCI) != 3 {
+		t.Fatalf("native/OCI inventory=%#v err=%v", got, err)
+	}
+}

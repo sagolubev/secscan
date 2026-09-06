@@ -115,3 +115,20 @@ func TestCodeMergePreservesFingerprint(t *testing.T) {
 		t.Fatal("Normalize mutated original sources")
 	}
 }
+
+func TestImagePackageIdentity(t *testing.T) {
+	a := Finding{Kind: "dependency", Package: &Package{Ecosystem: "apk", Name: "busybox", Version: "1", Qualifiers: "arch=arm64&distro=alpine-3.18"}, ImageDigest: "sha256:a", Advisories: []string{"CVE-2026-1"}}
+	b := a
+	b.ImageDigest = "sha256:b"
+	c := a
+	c.Package = &Package{Ecosystem: "apk", Name: "busybox", Version: "1", Qualifiers: "arch=amd64&distro=alpine-3.18"}
+	got := Normalize([]Finding{a, b, c, a})
+	if len(got) != 3 {
+		t.Fatalf("Normalize image identities=%#v want3", got)
+	}
+	for _, f := range got {
+		if f.Origin != "image" {
+			t.Errorf("image origin=%q", f.Origin)
+		}
+	}
+}

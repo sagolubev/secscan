@@ -101,7 +101,8 @@
       ],
       "tests": [
         "internal/orchestrator/orchestrator_test.go",
-        "internal/container/runtime_test.go"
+        "internal/container/runtime_test.go",
+        "internal/container/cancellation_test.go"
       ]
     },
     {
@@ -759,6 +760,19 @@
       ],
       "tests": [
         "internal/progress/progress_test.go"
+      ]
+    },
+    {
+      "requirement": "CLI contract",
+      "scenario": "Failure evidence",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/main.go",
+        "internal/orchestrator/orchestrator.go"
+      ],
+      "tests": [
+        "cmd/secscan/main_test.go",
+        "internal/orchestrator/orchestrator_test.go"
       ]
     }
   ],

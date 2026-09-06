@@ -18,6 +18,8 @@ type Exclusions struct {
 }
 
 type Inventory struct {
+	Native       []string
+	OCI          []string
 	Dependencies []string
 	Terraform    []string
 	Checkov      []string
@@ -60,6 +62,12 @@ func Discover(root string) (Inventory, error) {
 			inventory.Dependencies = append(inventory.Dependencies, path)
 		}
 		yaml := strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")
+		if base == "versions.properties" || base == "build.gradle" || base == "build.gradle.kts" || strings.HasSuffix(base, ".versions.toml") {
+			inventory.Native = append(inventory.Native, path)
+		}
+		if yaml || base == "Dockerfile" || strings.HasPrefix(base, "Dockerfile.") {
+			inventory.OCI = append(inventory.OCI, path)
+		}
 		stem := strings.TrimSuffix(strings.TrimPrefix(base, "."), filepath.Ext(base))
 		github := filepath.Dir(path) == ".github/workflows" && yaml || base == "action.yml" || base == "action.yaml"
 		zizmor := github || (filepath.Dir(path) == ".github" && (base == "dependabot.yml" || base == "dependabot.yaml")) || (base == ".pre-commit-config.yml" || base == ".pre-commit-config.yaml" || base == ".pre-commit-hooks.yml" || base == ".pre-commit-hooks.yaml")

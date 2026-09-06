@@ -18,7 +18,27 @@ type Report struct {
 	Exclusions    Exclusions `json:"exclusions"`
 }
 
+// Engine records one scanner engine in a combined persona.
+type Engine struct {
+	Name    string `json:"name"`
+	Image   string `json:"image"`
+	Version string `json:"version"`
+	Status  string `json:"status"`
+	Feeds   []Feed `json:"feeds,omitempty"`
+	Read    int    `json:"read"`
+	Failed  int    `json:"failed"`
+}
+
+// Image records the resolved immutable target identity.
+type Image struct {
+	Reference string `json:"reference"`
+	Digest    string `json:"digest"`
+	Status    string `json:"status"`
+}
+
 type Scanner struct {
+	Engines        []Engine `json:"engines,omitempty"`
+	Images         []Image  `json:"images,omitempty"`
 	Name           string   `json:"name"`
 	Status         string   `json:"status"`
 	Image          string   `json:"image"`
@@ -59,10 +79,11 @@ type Exclusions struct {
 
 // Package is a versioned package identity in its upstream ecosystem.
 type Package struct {
-	Ecosystem string `json:"ecosystem"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	PURL      string `json:"purl,omitempty"`
+	Qualifiers string `json:"qualifiers,omitempty"`
+	Ecosystem  string `json:"ecosystem"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	PURL       string `json:"purl,omitempty"`
 }
 
 // Location identifies one source occurrence.
@@ -73,6 +94,7 @@ type Location struct {
 }
 
 type Finding struct {
+	ImageDigest string     `json:"imageDigest,omitempty"`
 	Package     *Package   `json:"package,omitempty"`
 	Advisories  []string   `json:"advisories,omitempty"`
 	Locations   []Location `json:"locations,omitempty"`
@@ -140,7 +162,7 @@ func Normalize(input []Finding) []Finding {
 		if f.Kind != "dependency" || f.Package == nil {
 			continue
 		}
-		identity := packageKey(*f.Package)
+		identity := findingPackageKey(f)
 		for _, id := range f.Advisories {
 			key := identity + "\x00" + id
 			if prior, ok := seen[key]; ok {
@@ -204,13 +226,25 @@ func Normalize(input []Finding) []Finding {
 		f.RuleID = "dependency-advisory"
 		f.Message = "package version has a known security advisory"
 		f.Origin = "working_tree"
-		sum := sha256.Sum256([]byte(packageKey(*f.Package) + "\x00" + strings.Join(f.Advisories, "\x00")))
+		if f.ImageDigest != "" {
+			f.Origin = "image"
+		}
+		sum := sha256.Sum256([]byte(findingPackageKey(*f) + "\x00" + strings.Join(f.Advisories, "\x00")))
 		f.Fingerprint = hex.EncodeToString(sum[:])
 	}
 	return result
 }
 
-func packageKey(pkg Package) string { return pkg.Ecosystem + "\x00" + pkg.Name + "\x00" + pkg.Version }
+func findingPackageKey(f Finding) string {
+	key := f.Package.Ecosystem + "\x00" + f.Package.Name + "\x00" + f.Package.Version
+	if f.Package.Qualifiers != "" {
+		key += "\x00qualifiers:" + f.Package.Qualifiers
+	}
+	if f.ImageDigest != "" {
+		key += "\x00image:" + f.ImageDigest
+	}
+	return key
+}
 func severityRank(value string) int {
 	return slices.Index([]string{"", "unknown", "informational", "low", "medium", "high", "critical"}, value)
 }

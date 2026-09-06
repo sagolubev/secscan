@@ -190,8 +190,8 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) < 3 || len(got.Scanners) != 14 {
-		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/14", len(got.Findings), len(got.Scanners))
+	if len(got.Findings) < 3 || len(got.Scanners) != 17 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/17", len(got.Findings), len(got.Scanners))
 	}
 }
 
@@ -335,9 +335,10 @@ printf '%s\n' "$SECSCAN_TEST_RESULT"
 		t.Setenv("SECSCAN_TEST_RESULT", data)
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), []string{"--scanners", name, root}, &stdout, &stderr, scan)
-		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "all selected scanners failed") {
+		if code != 1 || !strings.Contains(stderr.String(), "all selected scanners failed") {
 			t.Errorf("%s zero analysis: exit=%d stdout=%s stderr=%s", name, code, &stdout, &stderr)
 		}
+		assertFailedReport(t, stdout.Bytes(), name)
 	}
 }
 
@@ -474,9 +475,10 @@ exit 99
 	t.Setenv("SECSCAN_TEST_BEARER_REPORT", clean)
 	var stdout bytes.Buffer
 	stderr.Reset()
-	if code := run(context.Background(), []string{"--scanners", "bearer", root}, &stdout, &stderr, scan); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "coverage_unconfirmed") {
+	if code := run(context.Background(), []string{"--scanners", "bearer", root}, &stdout, &stderr, scan); code != 1 || !strings.Contains(stderr.String(), "coverage_unconfirmed") {
 		t.Fatalf("empty Bearer exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 	}
+	assertFailedReport(t, stdout.Bytes(), "bearer")
 	stdout.Reset()
 	stderr.Reset()
 	if code := run(context.Background(), []string{"--scanners", "bearer,semgrep", root}, &stdout, &stderr, scan); code != 0 {
@@ -508,5 +510,110 @@ exit 99
 	engine := partial.Scanners[0]
 	if engine.Status != "success" || engine.Coverage.Read != 1 || !slices.Equal(engine.Coverage.ReadInputs, []string{"app.py"}) || engine.Coverage.Unread != 1 || !slices.Equal(engine.Coverage.UnreadInputs, []string{"bundle.min.js"}) {
 		t.Fatalf("positive Bearer metadata=%#v", engine)
+	}
+}
+
+func TestNativeSelectionAndOCIConsent(t *testing.T) {
+	if _, err := parseScannerSelection("oci-images"); err != nil {
+		t.Errorf("canonical OCI persona rejected: %v", err)
+	}
+	if _, err := parseScannerSelection("oci"); err == nil {
+		t.Error("unrequested OCI alias accepted")
+	}
+	all, err := parseScannerSelection("all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"gradle-catalog", "gradle-scripts", "refresh-versions"} {
+		if !slices.Contains(all, name) {
+			t.Errorf("all lacks %s", name)
+		}
+	}
+	if slices.Contains(all, "oci-images") {
+		t.Fatal("default enables OCI")
+	}
+	fake := func(_ context.Context, _ string, names []string, _ func(progress.Event)) (report.Report, error) {
+		if !slices.Contains(names, "oci-images") {
+			t.Error("explicit flag did not add OCI")
+		}
+		return report.Report{}, nil
+	}
+	if code := run(context.Background(), []string{"--scan-images", "--scanners", "refresh-versions"}, &bytes.Buffer{}, &bytes.Buffer{}, fake); code != 0 {
+		t.Errorf("flag exit=%d", code)
+	}
+	if code := run(context.Background(), []string{"--scanners", "oci-images"}, &bytes.Buffer{}, &bytes.Buffer{}, fake); code != 2 {
+		t.Errorf("missing consent exit=%d", code)
+	}
+}
+
+func TestNativeAndOCIWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	if err := exec.Command("git", "-C", root, "init", "--quiet").Run(); err != nil {
+		t.Fatal(err)
+	}
+	for file, data := range map[string]string{"versions.properties": "version.synthetic=1\n", "Dockerfile": "FROM example.invalid/synthetic:1\n"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := scan(context.Background(), root, []string{"refresh-versions"}, func(progress.Event) {})
+	if err != nil || len(result.Scanners) != 2 {
+		t.Fatalf("metadata+unchecked images=%#v err=%v", result, err)
+	}
+	for _, s := range result.Scanners {
+		if s.Name == "oci-images" && (s.Status != "skipped" || s.Coverage.Unread != 1) {
+			t.Errorf("disabled OCI=%#v", s)
+		}
+	}
+}
+
+func TestRunEmitsFailureEvidenceWithoutClaimingSuccess(t *testing.T) {
+	for _, failure := range []error{errors.New("SYNTHETIC_RAW_DIAGNOSTIC"), context.Canceled} {
+		attempted := func(ctx context.Context, _ string, _ []string, emit func(progress.Event)) (report.Report, error) {
+			outcome, err := orchestrator.Run(ctx, []orchestrator.Job{{Name: "oci-images", Run: func(context.Context) (report.Scanner, []report.Finding, error) {
+				return report.Scanner{Name: "oci-images", Status: "success", Coverage: report.Coverage{Read: 1, Unit: "images"}, Capabilities: []string{"host-runtime-registry-access"}, Images: []report.Image{{Reference: "synthetic:first", Digest: "sha256:complete", Status: "success"}, {Reference: "synthetic:second", Digest: "sha256:second", Status: "cleanup_failed"}}}, []report.Finding{{Kind: "code", RuleID: "completed-safe-finding", Fingerprint: "completed"}}, failure
+			}}}, 1, emit)
+			return buildReport("/synthetic", report.Exclusions{}, nil, outcome, err)
+		}
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"--scan-images", "--scanners", "oci-images", "--progress", "off"}, &stdout, &stderr, attempted)
+		var result report.Report
+		if code != 1 || json.Unmarshal(stdout.Bytes(), &result) != nil || bytes.Count(stdout.Bytes(), []byte("\n")) != 1 {
+			t.Fatalf("failure output exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+		}
+		if len(result.Scanners) != 1 || result.Scanners[0].Status != "failed" || result.Scanners[0].Coverage.Read != 1 || len(result.Scanners[0].Images) != 2 || len(result.Findings) != 2 {
+			t.Errorf("failure report lost evidence: %#v", result)
+		}
+		if strings.Contains(stdout.String()+stderr.String(), "SYNTHETIC_RAW_DIAGNOSTIC") {
+			t.Error("raw error leaked")
+		}
+	}
+}
+
+func TestRunFailureWithoutReportEmitsNoJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{"--progress", "off"}, &stdout, &stderr, func(context.Context, string, []string, func(progress.Event)) (report.Report, error) {
+		return report.Report{}, errors.New("runtime unavailable")
+	})
+	if code != 1 || stdout.Len() != 0 {
+		t.Fatalf("no-evidence failure exit=%d stdout=%s", code, &stdout)
+	}
+}
+
+func assertFailedReport(t *testing.T, data []byte, name string) {
+	t.Helper()
+	var result report.Report
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("failed %s report JSON: %v", name, err)
+	}
+	if result.SchemaVersion != "1" || len(result.Scanners) != 1 || len(result.Findings) != 1 || bytes.Count(data, []byte("\n")) != 1 {
+		t.Fatalf("failed %s report=%#v", name, result)
+	}
+	scanner := result.Scanners[0]
+	if scanner.Name != name || scanner.Status != "failed" || scanner.Coverage.Read != 0 || scanner.Coverage.Failed == 0 {
+		t.Errorf("failed scanner claims coverage: %#v", scanner)
+	}
+	if result.Findings[0].Kind != "error" || result.Findings[0].Message != "scanner failed" {
+		t.Errorf("failure leaked noncanonical result: %#v", result.Findings)
 	}
 }

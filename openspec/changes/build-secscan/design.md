@@ -406,6 +406,11 @@ run and removes that container with a separate bounded cleanup context after
 cancellation. It does not remove arbitrary user containers. All run/output
 entrypoints share this cleanup; tests verify the daemon state, not only client
 exit. OCI target-image ownership remains a separate guard in the image adapter.
+A failed job retains its supplied canonical evidence and completed findings;
+orchestration adds a static error finding and forces its failed status. The CLI
+serializes an available attempted-scan report even on failure, with exit1 when
+no scanner succeeded. Errors before a report exists still produce diagnostics
+only. This preserves OCI image digests, granted capabilities and cleanup status.
 
 ### 18. Delivery boundaries
 

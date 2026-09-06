@@ -63,6 +63,9 @@ func Run(
 				jobContext, cancel = context.WithCancel(ctx)
 			}
 			scanner, findings, err := job.Run(jobContext)
+			if err == nil {
+				err = jobContext.Err()
+			}
 			cancel()
 			results <- jobResult{
 				scanner:  scanner,
@@ -93,14 +96,15 @@ func Run(
 			Status:  progress.StatusFailed,
 			Message: "scanner failed",
 		})
-		output.Scanners = append(output.Scanners, report.Scanner{
-			Name:   result.name,
-			Status: "failed",
-			Coverage: report.Coverage{
-				Failed: 1,
-				Unit:   "scanner",
-			},
-		})
+		failed := result.scanner
+		failed.Name = result.name
+		failed.Status = "failed"
+		if failed.Coverage.Unit == "" {
+			failed.Coverage.Unit = "scanner"
+		}
+		failed.Coverage.Failed = max(1, failed.Coverage.Failed)
+		output.Scanners = append(output.Scanners, failed)
+		output.Findings = append(output.Findings, result.findings...)
 		sum := sha256.Sum256([]byte(result.name + "\x00scanner failed"))
 		output.Findings = append(output.Findings, report.Finding{
 			Kind:        "error",
@@ -109,6 +113,9 @@ func Run(
 			Fingerprint: hex.EncodeToString(sum[:]),
 			Sources:     []string{result.name},
 		})
+	}
+	if ctx.Err() != nil {
+		return output, ctx.Err()
 	}
 	if len(jobs) > 0 && output.Successes == 0 {
 		return output, ErrAllScannersFailed

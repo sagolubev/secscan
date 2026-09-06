@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,10 +19,20 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 	if err != nil {
 		return err
 	}
+	preparedSelection := append([]string(nil), selection...)
+	if slices.Contains(selection, "oci-images") {
+		preparedSelection = append(preparedSelection, "trivy", "grype")
+	}
 	return cache.Update(ctx, func(ctx context.Context, staging string) (map[string]Asset, error) {
 		result := map[string]Asset{}
-		for _, name := range selection {
+		for _, name := range preparedSelection {
+			if name == "refresh-versions" || name == "oci-images" {
+				continue
+			}
 			key := name
+			if name == "gradle-catalog" || name == "gradle-scripts" {
+				key = "osv-scanner"
+			}
 			if name == "python-sast" || name == "typescript-sast" {
 				key = "opengrep"
 			}
@@ -72,6 +83,16 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			}
 			if key == "trivy" || key == "grype" || key == "osv-scanner" {
 				files, _ := DependencyInputs(inventory.Dependencies)
+				if key == "osv-scanner" {
+					for _, native := range []string{"gradle-catalog", "gradle-scripts"} {
+						if slices.Contains(selection, native) {
+							files = append(files, NativeInputs(native, inventory.Dependencies)...)
+						}
+					}
+				}
+				if (key == "trivy" || key == "grype") && slices.Contains(selection, "oci-images") && len(files) == 0 {
+					files = []string{"package-lock.json"}
+				}
 				asset.Feeds, err = prepareDependencyFeeds(ctx, runtime, key, id, staging, files)
 				if err != nil {
 					return nil, fmt.Errorf("prepare %s feeds: %w", key, err)

@@ -114,3 +114,34 @@ func TestRunLimitsConcurrency(t *testing.T) {
 		t.Errorf("Run() max concurrency = %d, want 2", maxActive)
 	}
 }
+
+func TestRunPreservesEvidenceReturnedWithFailure(t *testing.T) {
+	for _, failure := range []error{errors.New("SYNTHETIC_RAW_DIAGNOSTIC"), context.Canceled} {
+		evidence := report.Scanner{Name: "oci-images", Status: "success", Coverage: report.Coverage{Read: 1, Unit: "images"}, Capabilities: []string{"host-runtime-registry-access"}, Images: []report.Image{{Reference: "synthetic:first", Digest: "sha256:completed", Status: "success"}, {Reference: "synthetic:second", Digest: "sha256:second", Status: "cleanup_failed"}}}
+		jobs := []Job{{Name: "oci-images", Run: func(context.Context) (report.Scanner, []report.Finding, error) {
+			return evidence, []report.Finding{{Kind: "dependency", RuleID: "completed-advisory", ImageDigest: "sha256:completed"}}, failure
+		}}}
+		got, err := Run(context.Background(), jobs, 1, func(progress.Event) {})
+		if !errors.Is(err, ErrAllScannersFailed) || got.Successes != 0 || len(got.Scanners) != 1 || len(got.Findings) != 2 {
+			t.Fatalf("Run failed evidence=%#v err=%v", got, err)
+		}
+		scanner := got.Scanners[0]
+		if scanner.Status != "failed" || scanner.Coverage.Read != 1 || scanner.Coverage.Failed == 0 || len(scanner.Images) != 2 || scanner.Images[1].Status != "cleanup_failed" || len(scanner.Capabilities) != 1 {
+			t.Errorf("failure evidence lost: %#v", scanner)
+		}
+		if got.Findings[0].ImageDigest != "sha256:completed" || got.Findings[1].Message != "scanner failed" {
+			t.Errorf("completed finding/static error lost: %#v", got.Findings)
+		}
+	}
+}
+
+func TestRunCanceledJobCannotClaimPartialSuccess(t *testing.T) {
+	jobs := []Job{{Name: "oci-images", Timeout: time.Millisecond, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+		<-ctx.Done()
+		return report.Scanner{Name: "oci-images", Status: "success", Coverage: report.Coverage{Read: 1, Unit: "images"}}, []report.Finding{{RuleID: "completed"}}, nil
+	}}}
+	got, err := Run(context.Background(), jobs, 1, func(progress.Event) {})
+	if !errors.Is(err, ErrAllScannersFailed) || got.Successes != 0 || got.Scanners[0].Status != "failed" || got.Scanners[0].Coverage.Read != 1 || len(got.Findings) != 2 {
+		t.Fatalf("canceled partial result=%#v err=%v", got, err)
+	}
+}

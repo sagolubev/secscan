@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -237,22 +235,9 @@ func parseDependencyOutput(data []byte, name string, selected ...[]string) ([]re
 					return nil, 0, nil, fmt.Errorf("invalid OSV package identity")
 				}
 				for _, group := range item.Groups {
-					severity := "unknown"
-					if group.Score != "" {
-						score, err := strconv.ParseFloat(group.Score, 64)
-						if err != nil || score < 0 || score > 10 || math.IsNaN(score) {
-							return nil, 0, nil, fmt.Errorf("invalid OSV severity")
-						}
-						switch {
-						case score >= 9:
-							severity = "critical"
-						case score >= 7:
-							severity = "high"
-						case score >= 4:
-							severity = "medium"
-						case score > 0:
-							severity = "low"
-						}
+					severity, err := advisorySeverity(group.Score)
+					if err != nil {
+						return nil, 0, nil, err
 					}
 					if err := add(item.Package.Ecosystem, item.Package.Name, item.Package.Version, severity, append(append([]string(nil), group.IDs...), group.Aliases...), []string{result.Source.Path}); err != nil {
 						return nil, 0, nil, err

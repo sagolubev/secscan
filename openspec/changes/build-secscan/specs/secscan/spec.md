@@ -16,6 +16,14 @@
 - **THEN** процесс завершается с кодом `1`
 - **WHEN** аргументы некорректны
 - **THEN** процесс завершается с кодом `2`
+- **WHEN** все выбранные personas skipped из-за отсутствия поддерживаемых inputs
+- **THEN** процесс возвращает report с явным skipped coverage и код `0`
+
+#### Scenario: Failure evidence
+- **WHEN** начатый scan завершается ошибкой после сбора findings или scanner evidence
+- **THEN** доступный canonical report сохраняется как один JSON document с явными failed statuses
+- **AND** процесс возвращает exit code `1`, если успешного scanner нет
+- **AND** ошибки до начала scan, включая недоступный runtime, не создают вымышленный report
 
 ### Requirement: Container runtime
 

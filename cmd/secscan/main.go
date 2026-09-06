@@ -44,6 +44,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	flags := flag.NewFlagSet("secscan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	scanImages := flags.Bool("scan-images", false, "authorize host runtime image pulls and offline archive scans")
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
@@ -58,6 +59,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
+	}
+	if slices.Contains(selection, "oci-images") && !*scanImages && !updating {
+		fmt.Fprintln(stderr, "oci-images scanning requires --scan-images")
+		return 2
+	}
+	if *scanImages && !slices.Contains(selection, "oci-images") {
+		selection = append(selection, "oci-images")
 	}
 	if flags.NArg() > 1 {
 		fmt.Fprintln(stderr, "expected at most one repository path")
@@ -108,10 +116,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, err := scan(ctx, path, selection, reporter.Emit)
-	if err != nil {
+	result, scanErr := scan(ctx, path, selection, reporter.Emit)
+	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, scanErr)
 		return 1
 	}
 	data, err := report.Marshal(result)
@@ -123,6 +131,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	closeReporter()
 	if _, err := fmt.Fprintln(stdout, string(data)); err != nil {
 		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if scanErr != nil {
+		fmt.Fprintln(stderr, scanErr)
 		return 1
 	}
 	return 0
@@ -145,8 +157,15 @@ func scan(
 	for _, name := range selection {
 		emit(progress.Event{Scanner: name, Stage: progress.StageQueued, Status: progress.StatusQueued})
 	}
+	unchecked, _, err := scanner.ScanOCI(ctx, container.Runtime{}, scanner.Cache{}, root, inventory.OCI, false, emit)
+	if err != nil {
+		return report.Report{}, err
+	}
 	dependencyFiles, dependencyUnread := scanner.DependencyInputs(inventory.Dependencies)
-	needsRuntime := slices.Contains(selection, "gitleaks") ||
+	needsRuntime := slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
+		slices.Contains(selection, "gradle-catalog") && len(scanner.NativeInputs("gradle-catalog", inventory.Native)) > 0 ||
+		slices.Contains(selection, "gradle-scripts") && len(scanner.NativeInputs("gradle-scripts", inventory.Native)) > 0 ||
+		slices.Contains(selection, "gitleaks") ||
 		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
 		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
 		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
@@ -167,6 +186,31 @@ func scan(
 	var jobs []orchestrator.Job
 	var skipped []report.Scanner
 	preparationErrors := map[string]error{}
+	for _, name := range []string{"gradle-catalog", "gradle-scripts", "refresh-versions"} {
+		if !slices.Contains(selection, name) {
+			continue
+		}
+		files := scanner.NativeInputs(name, inventory.Native)
+		if len(files) == 0 {
+			skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", Coverage: report.Coverage{Unit: "declarations"}})
+			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+			continue
+		}
+		jobs = append(jobs, orchestrator.Job{Name: name, Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+			if cacheErr != nil && name != "refresh-versions" {
+				return report.Scanner{}, nil, cacheErr
+			}
+			return scanner.ScanNative(ctx, runtime, cache, name, root, files, emit)
+		}})
+	}
+	if slices.Contains(selection, "oci-images") && (len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0) {
+		jobs = append(jobs, orchestrator.Job{Name: "oci-images", Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+			return scanner.ScanOCI(ctx, runtime, cache, root, inventory.OCI, true, emit)
+		}})
+	} else if slices.Contains(selection, "oci-images") || len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0 {
+		skipped = append(skipped, unchecked)
+		emit(progress.Event{Scanner: "oci-images", Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+	}
 	var gitleaksAsset scanner.Asset
 	var gitleaksErr error
 	if slices.Contains(selection, "gitleaks") {
@@ -367,10 +411,10 @@ func scan(
 		}
 	}
 	if result.Successes == 0 && len(preparationErrors) > 0 {
-		return report.Report{}, fmt.Errorf("prepared assets unavailable; run secscan update: %w", orchestrator.ErrAllScannersFailed)
+		runErr = fmt.Errorf("prepared assets unavailable; run secscan update: %w", orchestrator.ErrAllScannersFailed)
 	}
 	if result.Successes == 0 && len(selection) == 1 && selection[0] == "bearer" && len(skipped) == 0 {
-		return report.Report{}, fmt.Errorf("Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence: %w", orchestrator.ErrAllScannersFailed)
+		runErr = fmt.Errorf("Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence: %w", orchestrator.ErrAllScannersFailed)
 	}
 	return buildReport(
 		root,
@@ -392,8 +436,8 @@ func buildReport(
 	runErr error,
 ) (report.Report, error) {
 	result.Scanners = append(result.Scanners, skipped...)
-	if len(result.Scanners) > len(skipped) && result.Successes == 0 {
-		return report.Report{}, orchestrator.ErrAllScannersFailed
+	if len(result.Scanners) > len(skipped) && result.Successes == 0 && runErr == nil {
+		runErr = orchestrator.ErrAllScannersFailed
 	}
 	return report.Report{
 		SchemaVersion: "1",
@@ -405,10 +449,11 @@ func buildReport(
 }
 
 func parseScannerSelection(value string) ([]string, error) {
-	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner", "semgrep", "bearer", "cppcheck"}
+	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner", "semgrep", "bearer", "cppcheck", "gradle-catalog", "gradle-scripts", "refresh-versions"}
 	if value == "all" {
 		return allowed, nil
 	}
+	allowed = append(allowed, "oci-images")
 	seen := make(map[string]bool)
 	var selected []string
 	for _, name := range strings.Split(value, ",") {
