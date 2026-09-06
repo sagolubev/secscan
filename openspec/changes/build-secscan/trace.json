@@ -34,7 +34,8 @@
       "openspec/changes/build-secscan/proposal.md",
       "openspec/changes/build-secscan/README.md",
       "THIRD_PARTY_NOTICES.md",
-      "README.md"
+      "README.md",
+      "CLAUDE.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
