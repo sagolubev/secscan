@@ -27,7 +27,7 @@ import (
 	"golang.org/x/term"
 )
 
-type scanFunc func(context.Context, string, []string, func(progress.Event)) (report.Report, error)
+type scanFunc func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error)
 
 var version = "dev"
 
@@ -51,6 +51,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	showLicenses := flags.Bool("licenses", false, "print project and third-party license notices")
 	scanImages := flags.Bool("scan-images", false, "authorize host runtime image pulls and offline archive scans")
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
+	trivyReports := flags.String("trivy-reports", "", "write Trivy CycloneDX and SonarQube JSON to a new directory")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -101,6 +102,31 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		path = flags.Arg(0)
 	}
 
+	wantReports := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "trivy-reports" {
+			wantReports = true
+		}
+	})
+	var destination *exportDestination
+	if wantReports {
+		if updating || *trivyReports == "" || !slices.Contains(selection, "trivy") {
+			fmt.Fprintln(stderr, "--trivy-reports requires a directory and trivy in the scan selection; it cannot be used with update")
+			return 2
+		}
+		root, err := gitRoot(path)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		destination, err = prepareExportDestination(root, *trivyReports)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		defer destination.parent.Close()
+	}
+
 	if updating {
 		root, err := gitRoot(path)
 		if err != nil {
@@ -141,7 +167,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, scanErr := scan(ctx, path, selection, reporter.Emit)
+	result, scanErr := scan(ctx, path, selection, wantReports, reporter.Emit)
 	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
 		fmt.Fprintln(stderr, scanErr)
@@ -162,6 +188,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		fmt.Fprintln(stderr, scanErr)
 		return 1
 	}
+	if destination != nil {
+		if err := destination.write(ctx, result); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	return 0
 }
 
@@ -169,6 +201,7 @@ func scan(
 	ctx context.Context,
 	path string,
 	selection []string,
+	wantReports bool,
 	emit func(progress.Event),
 ) (report.Report, error) {
 	root, err := gitRoot(path)
@@ -404,6 +437,9 @@ func scan(
 		jobs = append(jobs, orchestrator.Job{Name: name, Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
 			if err := preparationErrors[name]; err != nil {
 				return report.Scanner{}, nil, err
+			}
+			if name == "trivy" && wantReports {
+				return scanner.ScanTrivyReports(ctx, runtime, cache, root, files, emit)
 			}
 			if name == "trivy" || name == "grype" || name == "osv-scanner" {
 				return scanner.ScanDependencies(ctx, runtime, cache, name, root, files, emit)

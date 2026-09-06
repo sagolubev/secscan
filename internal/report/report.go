@@ -37,18 +37,19 @@ type Image struct {
 }
 
 type Scanner struct {
-	Engines        []Engine `json:"engines,omitempty"`
-	Images         []Image  `json:"images,omitempty"`
-	Name           string   `json:"name"`
-	Status         string   `json:"status"`
-	Image          string   `json:"image"`
-	EngineVersion  string   `json:"engineVersion,omitempty"`
-	RulePackDigest string   `json:"rulePackDigest,omitempty"`
-	RuleCount      int      `json:"ruleCount,omitempty"`
-	Coverage       Coverage `json:"coverage"`
-	Feeds          []Feed   `json:"feeds,omitempty"`
-	Limitations    []string `json:"limitations,omitempty"`
-	Capabilities   []string `json:"capabilities,omitempty"`
+	TrivyReports   *TrivyReports `json:"-"`
+	Engines        []Engine      `json:"engines,omitempty"`
+	Images         []Image       `json:"images,omitempty"`
+	Name           string        `json:"name"`
+	Status         string        `json:"status"`
+	Image          string        `json:"image"`
+	EngineVersion  string        `json:"engineVersion,omitempty"`
+	RulePackDigest string        `json:"rulePackDigest,omitempty"`
+	RuleCount      int           `json:"ruleCount,omitempty"`
+	Coverage       Coverage      `json:"coverage"`
+	Feeds          []Feed        `json:"feeds,omitempty"`
+	Limitations    []string      `json:"limitations,omitempty"`
+	Capabilities   []string      `json:"capabilities,omitempty"`
 }
 
 // Feed records verified snapshot identity and acquisition time.

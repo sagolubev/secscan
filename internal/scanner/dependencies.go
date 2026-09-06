@@ -258,6 +258,15 @@ func parseDependencyOutput(data []byte, name string, selected ...[]string) ([]re
 // ScanDependencies stages supported manifests only and rejects incomplete feeds,
 // operational exits and findings outside the selected input inventory.
 func ScanDependencies(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, candidates []string, emit func(progress.Event)) (report.Scanner, []report.Finding, error) {
+	return scanDependencies(ctx, runtime, cache, name, root, candidates, emit, false)
+}
+
+// ScanTrivyReports also prepares sanitized integration reports from the same scan.
+func ScanTrivyReports(ctx context.Context, runtime container.Runtime, cache Cache, root string, candidates []string, emit func(progress.Event)) (report.Scanner, []report.Finding, error) {
+	return scanDependencies(ctx, runtime, cache, "trivy", root, candidates, emit, true)
+}
+
+func scanDependencies(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, candidates []string, emit func(progress.Event), wantReports bool) (report.Scanner, []report.Finding, error) {
 	files, unread := DependencyInputs(candidates)
 	if len(files) == 0 {
 		return report.Scanner{}, nil, fmt.Errorf("no supported dependency inputs")
@@ -277,10 +286,12 @@ func ScanDependencies(ctx context.Context, runtime container.Runtime, cache Cach
 	}
 	var findings []report.Finding
 	var readInputs, failedInputs []string
+	var trivyReports *report.TrivyReports
+	var exportErr error
 	count := 0
 	for _, group := range groups {
 		emit(progress.Event{Scanner: name, Stage: progress.StageScanning, Status: progress.StatusRunning, Files: len(group)})
-		extracted, n, read, err := scanDependencyInputs(ctx, runtime, name, asset.ImageID, feeds, root, group)
+		output, err := scanDependencyInputs(ctx, runtime, name, asset.ImageID, feeds, root, group, wantReports)
 		if ctx.Err() != nil {
 			return report.Scanner{}, nil, ctx.Err()
 		}
@@ -291,9 +302,11 @@ func ScanDependencies(ctx context.Context, runtime container.Runtime, cache Cach
 			failedInputs = append(failedInputs, group...)
 			continue
 		}
-		findings = append(findings, extracted...)
-		count += n
-		readInputs = append(readInputs, read...)
+		findings = append(findings, output.findings...)
+		count += output.count
+		readInputs = append(readInputs, output.readInputs...)
+		trivyReports = output.reports
+		exportErr = output.exportErr
 	}
 	if count == 0 {
 		return report.Scanner{}, nil, fmt.Errorf("dependency scanner did not extract packages")
@@ -314,7 +327,7 @@ func ScanDependencies(ctx context.Context, runtime container.Runtime, cache Cach
 	if name == "grype" {
 		unit = "files"
 	}
-	result := report.Scanner{Name: name, Status: "success", Image: asset.ImageID, EngineVersion: Catalog()[name].Version, Coverage: report.Coverage{Read: count, Unit: unit, ReadInputs: readInputs, Unread: len(unread), UnreadInputs: unread, FailedFiles: len(failedInputs), FailedInputs: failedInputs}, Limitations: []string{"only selected lockfiles and static dependency manifests are staged; repository scanner configuration excluded", "readInputs records positive package extraction per input; inputs without extraction remain unread or failed", "source locations without native lines are anchored at line 1", "network, call analysis, project builds and dependency resolution disabled"}}
+	result := report.Scanner{TrivyReports: trivyReports, Name: name, Status: "success", Image: asset.ImageID, EngineVersion: Catalog()[name].Version, Coverage: report.Coverage{Read: count, Unit: unit, ReadInputs: readInputs, Unread: len(unread), UnreadInputs: unread, FailedFiles: len(failedInputs), FailedInputs: failedInputs}, Limitations: []string{"only selected lockfiles and static dependency manifests are staged; repository scanner configuration excluded", "readInputs records positive package extraction per input; inputs without extraction remain unread or failed", "source locations without native lines are anchored at line 1", "network, call analysis, project builds and dependency resolution disabled"}}
 	keys, err := dependencyFeedKeys(name, files)
 	if err != nil {
 		return report.Scanner{}, nil, err
@@ -328,17 +341,28 @@ func ScanDependencies(ctx context.Context, runtime container.Runtime, cache Cach
 		result.Feeds = append(result.Feeds, report.Feed{Name: key, Digest: feed.Digest, AcquiredAt: feed.AcquiredAt.Format(time.RFC3339Nano), BuiltAt: built})
 	}
 	emit(progress.Event{Scanner: name, Stage: progress.StageDone, Status: progress.StatusSuccess, Files: len(files), Findings: len(findings)})
-	return result, findings, nil
+	if exportErr != nil {
+		result.Limitations = append(result.Limitations, "Trivy integration reports could not be generated")
+	}
+	return result, findings, exportErr
 }
 
-func scanDependencyInputs(ctx context.Context, runtime container.Runtime, name, imageID, feeds, root string, files []string) ([]report.Finding, int, []string, error) {
+type dependencyOutput struct {
+	findings   []report.Finding
+	count      int
+	readInputs []string
+	reports    *report.TrivyReports
+	exportErr  error
+}
+
+func scanDependencyInputs(ctx context.Context, runtime container.Runtime, name, imageID, feeds, root string, files []string, wantReports bool) (dependencyOutput, error) {
 	target, err := discovery.Stage(root, files)
 	if err != nil {
-		return nil, 0, nil, err
+		return dependencyOutput{}, err
 	}
 	defer os.RemoveAll(target)
 	if err := validateDependencyInputs(target, files); err != nil {
-		return nil, 0, nil, err
+		return dependencyOutput{}, err
 	}
 	markers := []string{"failed to parse", "failed to extract", "unable to parse", "unable to extract", "error parsing", "error extracting", "failed to analyze", "failed to open", "failed to read", "gathered packages packages=0 ", "gathered packages packages=0\n"}
 	var required []string
@@ -347,19 +371,23 @@ func scanDependencyInputs(ctx context.Context, runtime container.Runtime, name, 
 	}
 	data, code, err := runtime.OutputStatus(ctx, DependencyArgs(name, imageID, target, feeds, files), markers, required...)
 	if err != nil {
-		return nil, 0, nil, err
+		return dependencyOutput{}, err
 	}
 	if code != 0 && !(name == "osv-scanner" && code == 1) {
-		return nil, 0, nil, fmt.Errorf("dependency scanner operational exit %d", code)
+		return dependencyOutput{}, fmt.Errorf("dependency scanner operational exit %d", code)
 	}
 	findings, count, readInputs, err := parseDependencyOutput(data, name, files)
 	if err != nil {
-		return nil, 0, nil, err
+		return dependencyOutput{}, err
 	}
 	if name == "grype" {
 		readInputs = append([]string(nil), files...)
 	}
-	return findings, count, readInputs, nil
+	result := dependencyOutput{findings: findings, count: count, readInputs: readInputs}
+	if wantReports {
+		result.reports, result.exportErr = buildTrivyReports(data, files)
+	}
+	return result, nil
 }
 
 // DependencyInputs separates supported static inputs from candidates requiring other analysis.
