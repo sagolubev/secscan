@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.7",
-  "baselineCommit": "0e9ddab448a1f9524916569b31e03180cf8c4dc4",
+  "targetOutcome": "secscan-ij8.8",
+  "baselineCommit": "37ffbdde54b42f59caf521db2598259d01cf3afc",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -140,8 +140,13 @@
     {
       "requirement": "Canonical finding model",
       "scenario": "Cross-scanner dependency deduplication",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/report/report_test.go"
+      ]
     },
     {
       "requirement": "Canonical finding model",
@@ -268,8 +273,14 @@
     {
       "requirement": "Reproducibility",
       "scenario": "Pinned feeds",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/feeds.go",
+        "internal/scanner/dependencies.go"
+      ],
+      "tests": [
+        "internal/scanner/dependencies_test.go"
+      ]
     },
     {
       "requirement": "OCI image scanning",
@@ -594,20 +605,44 @@
     {
       "requirement": "Dependency scanners",
       "scenario": "Offline dependency findings",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/dependencies.go",
+        "internal/scanner/feeds.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/scanner/dependencies_test.go",
+        "internal/report/report_test.go"
+      ]
     },
     {
       "requirement": "Dependency scanners",
       "scenario": "Advisory alias merge",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/dependencies.go",
+        "internal/scanner/feeds.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/scanner/dependencies_test.go",
+        "internal/report/report_test.go"
+      ]
     },
     {
       "requirement": "Dependency scanners",
       "scenario": "Partial extraction",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.8"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/dependencies.go",
+        "internal/scanner/feeds.go",
+        "internal/report/report.go"
+      ],
+      "tests": [
+        "internal/scanner/dependencies_test.go",
+        "internal/report/report_test.go"
+      ]
     },
     {
       "requirement": "Additional code scanners",
@@ -676,23 +711,25 @@
     ],
     "target": [
       {
-        "name": "iac-scanner-tests",
+        "name": "dependency-tests",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
+          "./internal/report",
           "./internal/discovery",
+          "./internal/container",
           "./cmd/secscan"
         ]
       },
       {
-        "name": "iac-acceptance",
+        "name": "dependency-acceptance",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
           "-run",
-          "TestAcceptanceIaC",
+          "TestAcceptanceDependencies",
           "-count=1"
         ],
         "env": [
