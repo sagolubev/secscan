@@ -102,3 +102,42 @@ func runGit(t *testing.T, root string, args ...string) {
 		t.Fatalf("git %v: %v: %s", args, err, output)
 	}
 }
+
+func TestCIDiscoveryAndNoFSMonitor(t *testing.T) {
+	root := newGitRepository(t)
+	for _, path := range []string{".github/workflows/ci.yml", ".github/workflows/ignored.yml", ".pre-commit-config.yaml", ".github/dependabot.yml", ".gitlab-ci.yml", "azure-pipelines.yml", ".tekton/run.yml", ".poutine.yml", "azure-pipelinesfake.yml"} {
+		writeFile(t, root, path, "synthetic")
+	}
+	writeFile(t, root, ".gitignore", ".github/workflows/ignored.yml\n")
+	runGit(t, root, "add", ".gitignore", ".github/workflows/ci.yml")
+	hook := filepath.Join(root, "monitor.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\ntouch \""+filepath.Join(root, "executed")+"\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "config", "core.fsmonitor", hook)
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "executed")); !os.IsNotExist(err) {
+		t.Fatal("repository fsmonitor executed")
+	}
+	if len(got.Zizmor) != 3 || len(got.Poutine) != 4 || got.Ignored.Files != 1 {
+		t.Fatalf("unexpected inventory %#v", got)
+	}
+}
+
+func TestZizmorPreCommitExactNames(t *testing.T) {
+	root := newGitRepository(t)
+	for _, path := range []string{".pre-commit-config.yml", ".pre-commit-config.yaml", ".pre-commit-hooks.yml", ".pre-commit-hooks.yaml", "pre-commit-config.yml", "pre-commit-config.yaml", "pre-commit-hooks.yml", "pre-commit-hooks.yaml", ".github/dependabot.yml"} {
+		writeFile(t, root, path, "synthetic")
+	}
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{".github/dependabot.yml", ".pre-commit-config.yaml", ".pre-commit-config.yml", ".pre-commit-hooks.yaml", ".pre-commit-hooks.yml"}
+	if !reflect.DeepEqual(got.Zizmor, want) {
+		t.Fatalf("Zizmor=%q, want %q", got.Zizmor, want)
+	}
+}

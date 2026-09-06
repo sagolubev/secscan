@@ -190,8 +190,8 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) < 3 || len(got.Scanners) != 3 {
-		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/3", len(got.Findings), len(got.Scanners))
+	if len(got.Findings) < 3 || len(got.Scanners) != 5 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/5", len(got.Findings), len(got.Scanners))
 	}
 }
 
@@ -221,5 +221,25 @@ func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != "info" {
 		t.Fatalf("missing-cache scan ran commands beyond local runtime probe: %s", data)
+	}
+}
+
+func TestCISkippedWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	selected, err := parseScannerSelection("zizmor,poutine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := scan(context.Background(), root, selected, func(progress.Event) {})
+	if err != nil || len(result.Scanners) != 2 {
+		t.Fatalf("%#v %v", result, err)
+	}
+	for _, scanner := range result.Scanners {
+		if scanner.Status != "skipped" {
+			t.Fatalf("%#v", scanner)
+		}
 	}
 }

@@ -113,3 +113,24 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	_, _ = b.Buffer.Write(p)
 	return n, nil
 }
+
+// OutputRejecting also rejects known operational diagnostics without exposing their contents.
+func (runtime Runtime) OutputRejecting(ctx context.Context, args []string, markers []string) ([]byte, error) {
+	command := exec.CommandContext(ctx, runtime.Binary, args...)
+	var output, diagnostics limitedBuffer
+	command.Stdout = &output
+	command.Stderr = &diagnostics
+	if err := command.Run(); err != nil {
+		return nil, fmt.Errorf("scanner execution failed: %w", err)
+	}
+	if output.exceeded || diagnostics.exceeded {
+		return nil, fmt.Errorf("scanner output exceeds 64 MiB limit")
+	}
+	lower := bytes.ToLower(diagnostics.Bytes())
+	for _, marker := range markers {
+		if bytes.Contains(lower, []byte(marker)) {
+			return nil, fmt.Errorf("scanner reported an input parsing failure")
+		}
+	}
+	return output.Bytes(), nil
+}

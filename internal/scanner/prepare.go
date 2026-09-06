@@ -26,8 +26,11 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			var id, ref string
 			var err error
 			switch key {
-			case "gitleaks":
+			case "gitleaks", "zizmor", "poutine":
 				ref = gitleaks.Image
+				if key != "gitleaks" {
+					ref = Catalog()[key].Image
+				}
 				if err = runtime.RunDiagnostic(ctx, []string{"pull", ref}); err == nil {
 					var data []byte
 					data, err = runtime.Output(ctx, "image", "inspect", "--format", "{{.Id}}", ref)
@@ -58,7 +61,7 @@ func (c Cache) Resolve(ctx context.Context, runtime container.Runtime, name stri
 	if !ok || !ValidImageID(asset.ImageID) {
 		return Asset{}, fmt.Errorf("%s is not prepared; run secscan update", name)
 	}
-	expected := ""
+	expected := Catalog()[name].Image
 	switch name {
 	case "gitleaks":
 		expected = gitleaks.Image

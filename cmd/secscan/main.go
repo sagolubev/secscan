@@ -147,7 +147,8 @@ func scan(
 	}
 	needsRuntime := slices.Contains(selection, "gitleaks") ||
 		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
-		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0
+		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
+		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0
 	var runtime container.Runtime
 	if needsRuntime {
 		runtime, err = container.DetectDefault(ctx)
@@ -270,6 +271,32 @@ func scan(
 		})
 	}
 
+	for _, name := range []string{"zizmor", "poutine"} {
+		if !slices.Contains(selection, name) {
+			continue
+		}
+		files := inventory.Zizmor
+		if name == "poutine" {
+			files = inventory.Poutine
+		}
+		if len(files) == 0 {
+			skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", Coverage: report.Coverage{Unit: "files"}})
+			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+			continue
+		}
+		if cacheErr != nil {
+			preparationErrors[name] = cacheErr
+		} else if _, err := cache.Resolve(ctx, runtime, name); err != nil {
+			preparationErrors[name] = err
+		}
+		jobs = append(jobs, orchestrator.Job{Name: name, Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+			if err := preparationErrors[name]; err != nil {
+				return report.Scanner{}, nil, err
+			}
+			return scanner.ScanCI(ctx, runtime, cache, name, root, files, emit)
+		}})
+	}
+
 	result, runErr := orchestrator.Run(ctx, jobs, 3, emit)
 
 	for i := range result.Scanners {
@@ -313,7 +340,7 @@ func buildReport(
 }
 
 func parseScannerSelection(value string) ([]string, error) {
-	allowed := []string{"gitleaks", "python-sast", "typescript-sast"}
+	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine"}
 	if value == "all" {
 		return allowed, nil
 	}

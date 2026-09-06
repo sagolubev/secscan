@@ -19,6 +19,9 @@ type Exclusions struct {
 type Inventory struct {
 	Python     []string
 	TypeScript []string
+	CI         []string
+	Zizmor     []string
+	Poutine    []string
 	Ignored    Exclusions
 }
 
@@ -44,6 +47,23 @@ func Discover(root string) (Inventory, error) {
 		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
 			continue
 		}
+
+		base := filepath.Base(path)
+		yaml := strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")
+		stem := strings.TrimSuffix(strings.TrimPrefix(base, "."), filepath.Ext(base))
+		github := filepath.Dir(path) == ".github/workflows" && yaml || base == "action.yml" || base == "action.yaml"
+		zizmor := github || (filepath.Dir(path) == ".github" && (base == "dependabot.yml" || base == "dependabot.yaml")) || (base == ".pre-commit-config.yml" || base == ".pre-commit-config.yaml" || base == ".pre-commit-hooks.yml" || base == ".pre-commit-hooks.yaml")
+		poutine := github || path == ".gitlab-ci.yml" || (yaml && (stem == "azure-pipelines" || strings.HasPrefix(stem, "azure-pipelines-") || filepath.Dir(path) == ".tekton"))
+		if zizmor {
+			inventory.Zizmor = append(inventory.Zizmor, path)
+		}
+		if poutine {
+			inventory.Poutine = append(inventory.Poutine, path)
+		}
+		if zizmor || poutine {
+			inventory.CI = append(inventory.CI, path)
+		}
+
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".py", ".pyi":
 			inventory.Python = append(inventory.Python, path)
@@ -51,6 +71,7 @@ func Discover(root string) (Inventory, error) {
 			inventory.TypeScript = append(inventory.TypeScript, path)
 		}
 	}
+	sort.Strings(inventory.CI)
 	sort.Strings(inventory.Python)
 	sort.Strings(inventory.TypeScript)
 	for _, path := range ignored {
@@ -125,7 +146,7 @@ func safeSource(root, clean string) (string, error) {
 }
 
 func gitPaths(root string, args ...string) ([]string, error) {
-	commandArgs := append([]string{"-C", root, "ls-files", "-z"}, args...)
+	commandArgs := append([]string{"-c", "core.fsmonitor=false", "-C", root, "ls-files", "-z"}, args...)
 	output, err := exec.Command("git", commandArgs...).Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
