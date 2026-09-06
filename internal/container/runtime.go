@@ -3,12 +3,15 @@ package container
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type Runtime struct {
@@ -54,31 +57,30 @@ func DetectDefault(ctx context.Context) (Runtime, error) {
 }
 
 func (runtime Runtime) Run(ctx context.Context, args []string) error {
-	command := exec.CommandContext(ctx, runtime.Binary, args...)
-	if err := command.Run(); err != nil {
+	if err := runtime.execute(ctx, args, io.Discard, io.Discard); err != nil {
 		return fmt.Errorf("%s run failed: %w", runtime.Binary, err)
 	}
 	return nil
 }
 
 func (runtime Runtime) RunDiagnostic(ctx context.Context, args []string) error {
-	command := exec.CommandContext(ctx, runtime.Binary, args...)
-	if output, err := command.CombinedOutput(); err != nil {
-		detail := strings.TrimSpace(string(output))
+	var output limitedBuffer
+	if err := runtime.execute(ctx, args, &output, &output); err != nil {
+		detail := strings.TrimSpace(output.String())
 		if len(detail) > 2048 {
 			detail = detail[len(detail)-2048:]
 		}
 		return fmt.Errorf("%s command failed: %w: %s", runtime.Binary, err, detail)
 	}
+	if output.exceeded {
+		return fmt.Errorf("command output exceeds 64 MiB limit")
+	}
 	return nil
 }
 
 func (runtime Runtime) Output(ctx context.Context, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, runtime.Binary, args...)
 	var output limitedBuffer
-	command.Stdout = &output
-	command.Stderr = io.Discard
-	err := command.Run()
+	err := runtime.execute(ctx, args, &output, io.Discard)
 	if err != nil {
 		return nil, fmt.Errorf("%s output failed: %w", runtime.Binary, err)
 	}
@@ -116,11 +118,8 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 
 // OutputRejecting also rejects known operational diagnostics without exposing their contents.
 func (runtime Runtime) OutputRejecting(ctx context.Context, args []string, markers []string) ([]byte, error) {
-	command := exec.CommandContext(ctx, runtime.Binary, args...)
 	var output, diagnostics limitedBuffer
-	command.Stdout = &output
-	command.Stderr = &diagnostics
-	if err := command.Run(); err != nil {
+	if err := runtime.execute(ctx, args, &output, &diagnostics); err != nil {
 		return nil, fmt.Errorf("scanner execution failed: %w", err)
 	}
 	if output.exceeded || diagnostics.exceeded {
@@ -139,13 +138,10 @@ func (runtime Runtime) OutputRejecting(ctx context.Context, args []string, marke
 // cancellation, oversized output and known failure diagnostics remain errors;
 // stderr content never leaves this boundary.
 func (runtime Runtime) OutputStatus(ctx context.Context, args []string, markers []string, required ...string) ([]byte, int, error) {
-	command := exec.CommandContext(ctx, runtime.Binary, args...)
 	var output, diagnostics limitedBuffer
-	command.Stdout = &output
-	command.Stderr = &diagnostics
-	err := command.Run()
+	err := runtime.execute(ctx, args, &output, &diagnostics)
 	if ctx.Err() != nil {
-		return nil, 0, ctx.Err()
+		return nil, 0, err
 	}
 	code := 0
 	if err != nil {
@@ -170,4 +166,42 @@ func (runtime Runtime) OutputStatus(ctx context.Context, args []string, markers 
 		}
 	}
 	return output.Bytes(), code, nil
+}
+
+// execute owns scanner container names so cancellation cannot leave a daemon-side
+// process running after the CLI is killed. Callers must not set container names.
+func (runtime Runtime) execute(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	name := ""
+	if len(args) > 0 && args[0] == "run" {
+		for _, arg := range args[1:] {
+			if arg == "--name" || strings.HasPrefix(arg, "--name=") {
+				return fmt.Errorf("container names are reserved for secscan cleanup")
+			}
+		}
+		var nonce [16]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			return fmt.Errorf("create container identity: %w", err)
+		}
+		name = "secscan-run-" + hex.EncodeToString(nonce[:])
+		args = append([]string{"run", "--name", name}, args[1:]...)
+	}
+	command := exec.CommandContext(ctx, runtime.Binary, args...)
+	command.Stdout, command.Stderr = stdout, stderr
+	command.WaitDelay = time.Second
+	err := command.Run()
+	if ctx.Err() == nil {
+		return err
+	}
+	var cleanupErr error
+	if name != "" {
+		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if removeErr := exec.CommandContext(cleanup, runtime.Binary, "rm", "--force", name).Run(); removeErr != nil {
+			cleanupErr = fmt.Errorf("owned container cleanup could not be confirmed: %w", removeErr)
+		}
+	}
+	return errors.Join(ctx.Err(), err, cleanupErr)
 }
