@@ -3,8 +3,8 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.5",
-  "baselineCommit": "f41a23f2b04f9806c99f7321209d52941432a97c",
+  "targetOutcome": "secscan-ij8.6",
+  "baselineCommit": "90a907f2b6fb204ae6b41fce96d1f72a9ae5617e",
   "scope": {
     "implementation": [
       ".gitignore",
@@ -542,14 +542,28 @@
     {
       "requirement": "CI scanners",
       "scenario": "Local CI analysis",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.6"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/ci.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/ci_test.go",
+        "cmd/secscan/main_test.go"
+      ]
     },
     {
       "requirement": "CI scanners",
       "scenario": "Offline CI limitations",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.6"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/ci.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/ci_test.go",
+        "cmd/secscan/main_test.go"
+      ]
     },
     {
       "requirement": "IaC scanners",
@@ -648,25 +662,23 @@
     ],
     "target": [
       {
-        "name": "preparation-tests",
+        "name": "ci-scanner-tests",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
-          "./cmd/secscan",
-          "./internal/gitleaks",
-          "./internal/opengrep"
+          "./internal/discovery",
+          "./cmd/secscan"
         ]
       },
       {
-        "name": "preparation-acceptance",
+        "name": "ci-acceptance",
         "argv": [
           "go",
           "test",
           "./internal/scanner",
-          "./cmd/secscan",
           "-run",
-          "TestAcceptance",
+          "TestAcceptanceCI",
           "-count=1"
         ],
         "env": [
@@ -722,9 +734,7 @@
         "argv": [
           "go",
           "test",
-          "./cmd/secscan",
-          "./internal/gitleaks",
-          "./internal/opengrep",
+          "./...",
           "-run",
           "TestAcceptance",
           "-count=1"
