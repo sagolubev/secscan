@@ -519,10 +519,13 @@
       "scenario": "Offline scan",
       "disposition": "target",
       "components": [
-        "internal/scanner/cache.go"
+        "internal/scanner/prepare.go",
+        "cmd/secscan/main.go",
+        "internal/container/runtime.go"
       ],
       "tests": [
-        "internal/scanner/cache_test.go"
+        "cmd/secscan/main_test.go",
+        "internal/container/runtime_test.go"
       ]
     },
     {

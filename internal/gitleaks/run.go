@@ -3,6 +3,7 @@ package gitleaks
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -14,14 +15,8 @@ import (
 const Image = "ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f"
 
 func ContainerArgs(repository, output string) []string {
-	return []string{
-		"run", "--rm",
-		"--network", "none",
-		"--read-only",
-		"--cap-drop", "ALL",
-		"--security-opt", "no-new-privileges",
+	return append(container.IsolatedArgs(repository, "/repo"), []string{
 		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
-		"--mount", "type=bind,src=" + repository + ",dst=/repo,readonly",
 		"--mount", "type=bind,src=" + output + ",dst=/out",
 		Image,
 		"dir", "/repo",
@@ -29,7 +24,7 @@ func ContainerArgs(repository, output string) []string {
 		"--exit-code", "0",
 		"--report-format", "json",
 		"--report-path", "/out/gitleaks.json",
-	}
+	}...)
 }
 
 func Scan(
@@ -37,6 +32,7 @@ func Scan(
 	runtime container.Runtime,
 	repository string,
 	emit func(progress.Event),
+	imageIDs ...string,
 ) (report.Report, error) {
 	output, err := createReportDir(os.UserCacheDir)
 	if err != nil {
@@ -49,7 +45,17 @@ func Scan(
 		Stage:   progress.StageScanning,
 		Status:  progress.StatusRunning,
 	})
-	if err := runtime.Run(ctx, ContainerArgs(repository, output)); err != nil {
+	args := ContainerArgs(repository, output)
+	imageID := Image
+	if len(imageIDs) > 0 {
+		imageID = imageIDs[0]
+		for i, value := range args {
+			if value == Image {
+				args[i] = imageID
+			}
+		}
+	}
+	if err := runtime.Run(ctx, args); err != nil {
 		return report.Report{}, err
 	}
 	emit(progress.Event{
@@ -57,7 +63,15 @@ func Scan(
 		Stage:   progress.StageReading,
 		Status:  progress.StatusRunning,
 	})
-	data, err := os.ReadFile(filepath.Join(output, "gitleaks.json"))
+	file, err := os.Open(filepath.Join(output, "gitleaks.json"))
+	if err != nil {
+		return report.Report{}, fmt.Errorf("read Gitleaks report: %w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, (64<<20)+1))
+	if len(data) > 64<<20 {
+		return report.Report{}, fmt.Errorf("Gitleaks report exceeds 64 MiB limit")
+	}
 	if err != nil {
 		return report.Report{}, fmt.Errorf("read Gitleaks report: %w", err)
 	}
@@ -76,7 +90,7 @@ func Scan(
 		Scanners: []report.Scanner{{
 			Name:   "gitleaks",
 			Status: "success",
-			Image:  Image,
+			Image:  imageID,
 			Coverage: report.Coverage{
 				Read:   1,
 				Failed: 0,

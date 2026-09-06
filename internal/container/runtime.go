@@ -1,9 +1,12 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -72,9 +75,41 @@ func (runtime Runtime) RunDiagnostic(ctx context.Context, args []string) error {
 
 func (runtime Runtime) Output(ctx context.Context, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, runtime.Binary, args...)
-	output, err := command.Output()
+	var output limitedBuffer
+	command.Stdout = &output
+	command.Stderr = io.Discard
+	err := command.Run()
 	if err != nil {
 		return nil, fmt.Errorf("%s output failed: %w", runtime.Binary, err)
 	}
-	return output, nil
+	if output.exceeded {
+		return nil, fmt.Errorf("scanner output exceeds 64 MiB limit")
+	}
+	return output.Bytes(), nil
+}
+
+// IsolatedArgs returns the common offline boundary with the invoking user identity.
+func IsolatedArgs(target, destination string) []string {
+	return isolatedArgs(target, destination, os.Getuid(), os.Getgid())
+}
+
+func isolatedArgs(target, destination string, uid, gid int) []string {
+	return []string{"run", "--rm", "--pull", "never", "--network", "none", "--read-only", "--user", fmt.Sprintf("%d:%d", uid, gid), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--env", "HOME=/tmp", "--mount", "type=bind,src=" + target + ",dst=" + destination + ",readonly"}
+}
+
+type limitedBuffer struct {
+	bytes.Buffer
+	exceeded bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	const limit = 64 << 20
+	n := len(p)
+	remaining := limit - b.Len()
+	if len(p) > remaining {
+		b.exceeded = true
+		p = p[:remaining]
+	}
+	_, _ = b.Buffer.Write(p)
+	return n, nil
 }

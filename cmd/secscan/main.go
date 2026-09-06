@@ -22,6 +22,7 @@ import (
 	"github.com/sigiuscom/secscan/internal/orchestrator"
 	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
+	"github.com/sigiuscom/secscan/internal/scanner"
 	"golang.org/x/term"
 )
 
@@ -37,6 +38,10 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scanFunc) int {
+	updating := len(args) > 0 && args[0] == "update"
+	if updating {
+		args = args[1:]
+	}
 	flags := flag.NewFlagSet("secscan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
@@ -61,6 +66,29 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	path := "."
 	if flags.NArg() == 1 {
 		path = flags.Arg(0)
+	}
+
+	if updating {
+		root, err := gitRoot(path)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		runtime, err := container.DetectDefault(ctx)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		cache, err := scanner.DefaultCache()
+		if err == nil {
+			err = scanner.Update(ctx, runtime, cache, selection, root)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stderr, "scanner assets prepared")
+		return 0
 	}
 
 	reporter := progress.New(
@@ -128,14 +156,29 @@ func scan(
 		}
 	}
 
+	cache, cacheErr := scanner.DefaultCache()
 	var jobs []orchestrator.Job
 	var skipped []report.Scanner
+	preparationErrors := map[string]error{}
+	var gitleaksAsset scanner.Asset
+	var gitleaksErr error
 	if slices.Contains(selection, "gitleaks") {
+		if cacheErr != nil {
+			gitleaksErr = cacheErr
+		} else {
+			gitleaksAsset, gitleaksErr = cache.Resolve(ctx, runtime, "gitleaks")
+		}
+		if gitleaksErr != nil {
+			preparationErrors["gitleaks"] = gitleaksErr
+		}
 		jobs = append(jobs, orchestrator.Job{
 			Name:    "gitleaks",
 			Timeout: 10 * time.Minute,
 			Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
-				result, err := gitleaks.Scan(ctx, runtime, root, emit)
+				if gitleaksErr != nil {
+					return report.Scanner{}, nil, gitleaksErr
+				}
+				result, err := gitleaks.Scan(ctx, runtime, root, emit, gitleaksAsset.ImageID)
 				if err != nil {
 					return report.Scanner{}, nil, err
 				}
@@ -171,7 +214,13 @@ func scan(
 				})
 			}
 		}
-		imageID, imageErr = opengrep.EnsureImage(ctx, runtime)
+		if cacheErr != nil {
+			imageErr = cacheErr
+		} else {
+			var asset scanner.Asset
+			asset, imageErr = cache.Resolve(ctx, runtime, "opengrep")
+			imageID = asset.ImageID
+		}
 	}
 	for _, language := range languages {
 		if !slices.Contains(selection, language.scanner) {
@@ -191,6 +240,9 @@ func scan(
 				},
 			})
 			continue
+		}
+		if imageErr != nil {
+			preparationErrors[language.scanner] = imageErr
 		}
 		language := language
 		jobs = append(jobs, orchestrator.Job{
@@ -219,6 +271,15 @@ func scan(
 	}
 
 	result, runErr := orchestrator.Run(ctx, jobs, 3, emit)
+
+	for i := range result.Scanners {
+		if preparationErrors[result.Scanners[i].Name] != nil {
+			result.Scanners[i].Limitations = []string{"prepared assets unavailable; run secscan update"}
+		}
+	}
+	if result.Successes == 0 && len(preparationErrors) > 0 {
+		return report.Report{}, fmt.Errorf("prepared assets unavailable; run secscan update: %w", orchestrator.ErrAllScannersFailed)
+	}
 	return buildReport(
 		root,
 		report.Exclusions{

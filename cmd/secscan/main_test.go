@@ -176,6 +176,9 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	if code := run(context.Background(), []string{"update", "--scanners", "all", repository}, &bytes.Buffer{}, &stderr, scan); code != 0 {
+		t.Fatalf("update exit = %d: %s", code, stderr.String())
+	}
 	code := run(context.Background(), []string{"--scanners", "all", repository}, &stdout, &stderr, scan)
 	if code != 0 {
 		t.Fatalf("run() exit = %d, want 0; stderr=%s", code, stderr.String())
@@ -189,5 +192,34 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	}
 	if len(got.Findings) < 3 || len(got.Scanners) != 3 {
 		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/3", len(got.Findings), len(got.Scanners))
+	}
+}
+
+func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", home)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SECSCAN_TEST_CALLS", log)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	_, err := scan(context.Background(), root, []string{"gitleaks"}, func(progress.Event) {})
+	if err == nil || !strings.Contains(err.Error(), "secscan update") {
+		t.Fatalf("scan missing cache error=%v", err)
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) != "info" {
+		t.Fatalf("missing-cache scan ran commands beyond local runtime probe: %s", data)
 	}
 }

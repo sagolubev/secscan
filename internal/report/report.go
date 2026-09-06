@@ -21,6 +21,16 @@ type Scanner struct {
 	RulePackDigest string   `json:"rulePackDigest,omitempty"`
 	RuleCount      int      `json:"ruleCount,omitempty"`
 	Coverage       Coverage `json:"coverage"`
+	Feeds          []Feed   `json:"feeds,omitempty"`
+	Limitations    []string `json:"limitations,omitempty"`
+	Capabilities   []string `json:"capabilities,omitempty"`
+}
+
+// Feed records verified snapshot identity and acquisition time.
+type Feed struct {
+	Name       string `json:"name"`
+	Digest     string `json:"digest"`
+	AcquiredAt string `json:"acquiredAt"`
 }
 
 type Coverage struct {

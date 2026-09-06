@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sigiuscom/secscan/internal/container"
 	"github.com/sigiuscom/secscan/internal/progress"
 	"github.com/sigiuscom/secscan/internal/report"
 )
@@ -72,14 +73,8 @@ func Scan(
 }
 
 func ContainerArgs(imageID, language, target string) []string {
-	return []string{
-		"run", "--rm",
-		"--network", "none",
-		"--read-only",
-		"--cap-drop", "ALL",
-		"--security-opt", "no-new-privileges",
+	return append(container.IsolatedArgs(target, "/target"), []string{
 		"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=256m",
-		"--mount", "type=bind,src=" + target + ",dst=/target,readonly",
 		imageID,
 		"scan",
 		"--quiet",
@@ -88,7 +83,7 @@ func ContainerArgs(imageID, language, target string) []string {
 		"--config=/rules/" + language + ".yml",
 		"--no-git-ignore",
 		"/target",
-	}
+	}...)
 }
 
 func languageRuleCount(language string) int {
