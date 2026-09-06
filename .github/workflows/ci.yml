@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Go ${{ matrix.go }} / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+        go: ['1.24.13', '1.27.1']
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ matrix.go }}
+      - run: .github/scripts/check.sh
+        env:
+          GOTOOLCHAIN: local
+
+  governance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.1'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - run: .github/scripts/install-tools.sh
+      - run: openspec validate --all --strict
+      - run: actionlint .github/workflows/ci.yml .github/workflows/release.yml
+      - name: Validate trace, scope, authority and staleness
+        run: go run ./cmd/tracecheck --validate-only > "$RUNNER_TEMP/trace-validation.json"
+      - name: Check complete Git history for secrets
+        run: |
+          image=ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          docker pull "$image"
+          docker run --rm --pull never --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m --env HOME=/tmp \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/repo,readonly" --workdir /repo \
+            "$image" git . --log-opts=--all --redact=100 --no-banner
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trace-validation
+          path: ${{ runner.temp }}/trace-validation.json
+          if-no-files-found: error
+
+  acceptance:
+    name: Container acceptance / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.1'
+      - name: Reserve ephemeral runner space for scanner images and databases
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet
+          df -h /
+      - name: Prepare the runtime fixture
+        run: |
+          mkdir -p "$HOME/.cache/secscan"
+          docker pull ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+      - name: Run every container acceptance test
+        run: go test ./... -run TestAcceptance -count=1 -v -timeout=35m
+        env:
+          SECSCAN_ACCEPTANCE: '1'
+          SECSCAN_BEARER_ACCEPTANCE: '1'
+
+  binaries:
+    name: Binary / ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, goos: linux, goarch: amd64}
+          - {runner: ubuntu-24.04-arm, goos: linux, goarch: arm64}
+          - {runner: macos-15-intel, goos: darwin, goarch: amd64}
+          - {runner: macos-15, goos: darwin, goarch: arm64}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.1'
+      - name: Build and run native standalone executable
+        env:
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          test "$(go env GOOS)" = "$TARGET_OS"
+          test "$(go env GOARCH)" = "$TARGET_ARCH"
+          VERSION="dev-$(git rev-parse --short=12 HEAD)"
+          if [[ "$REF_TYPE" == tag ]]; then VERSION="$REF_NAME"; fi
+          export VERSION
+          .github/scripts/build.sh "$TARGET_OS" "$TARGET_ARCH"
+          binary="$GITHUB_WORKSPACE/dist/secscan-$TARGET_OS-$TARGET_ARCH"
+          cd "$RUNNER_TEMP"
+          test "$("$binary" --version)" = "secscan $VERSION"
+          "$binary" --licenses > notices.txt
+          grep -q 'MIT License' notices.txt
+          grep -q 'The Go Authors' notices.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: secscan-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/secscan-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
