@@ -360,6 +360,11 @@ resolution, target config/ignore loading and archive extraction, and mounts
 only verified external rules. Rule blobs are never embedded in secscan.
 The native amd64 acceptance test is explicit; an arm64 skip does not claim
 that the amd64 analysis path was runtime-verified on this host.
+Bearer 2.1.1 SARIF has no reliable per-file completion evidence. Only validated
+finding paths provide positive read evidence; all remaining selected inputs
+stay unread. Empty SARIF without positive analysis evidence fails as coverage
+unconfirmed, rather than producing a clean success. Partial findings remain
+useful and retain the explicit coverage limitation.
 Semgrep and Bearer images are pulled from upstream
 at runtime preparation and are not redistributed by this project. Semgrep's
 current image labels reference proprietary source; do not label it LGPL-only.

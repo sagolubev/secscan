@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -128,6 +129,14 @@ func Normalize(input []Finding) []Finding {
 	seen := make(map[string]int)
 	for i, f := range input {
 		parents[i] = i
+		if f.Kind == "code" && strings.HasPrefix(f.RuleID, "secscan.") && (slices.Contains(f.Sources, "semgrep") || slices.Contains(f.Sources, "opengrep")) {
+			key := fmt.Sprintf("code\x00%s\x00%s\x00%s\x00%d\x00%d", f.RuleID, f.Language, f.Path, f.Line, f.EndLine)
+			if prior, ok := seen[key]; ok {
+				parents[root(i)] = root(prior)
+			} else {
+				seen[key] = i
+			}
+		}
 		if f.Kind != "dependency" || f.Package == nil {
 			continue
 		}
@@ -153,7 +162,7 @@ func Normalize(input []Finding) []Finding {
 			if severityRank(f.Severity) > severityRank(dest.Severity) {
 				dest.Severity = f.Severity
 			}
-			if f.Package.PURL != "" && (dest.Package.PURL == "" || f.Package.PURL < dest.Package.PURL) {
+			if f.Package != nil && dest.Package != nil && f.Package.PURL != "" && (dest.Package.PURL == "" || f.Package.PURL < dest.Package.PURL) {
 				dest.Package.PURL = f.Package.PURL
 			}
 			continue

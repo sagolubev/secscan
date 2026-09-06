@@ -190,8 +190,8 @@ func TestAcceptanceCLIContainerScan(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("run() stdout is not one JSON document: %v", err)
 	}
-	if len(got.Findings) < 3 || len(got.Scanners) != 11 {
-		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/11", len(got.Findings), len(got.Scanners))
+	if len(got.Findings) < 3 || len(got.Scanners) != 14 {
+		t.Fatalf("run() findings/scanners = %d/%d, want at least 3/14", len(got.Findings), len(got.Scanners))
 	}
 }
 
@@ -375,5 +375,138 @@ func TestDependencyUnreadOnlyDoesNotSucceed(t *testing.T) {
 	}
 	if len(result.Scanners) != 1 || result.Scanners[0].Status != "skipped" || result.Scanners[0].Coverage.Read != 0 || len(result.Scanners[0].Coverage.UnreadInputs) != 1 {
 		t.Fatalf("unread-only result=%#v", result)
+	}
+}
+
+func TestCodeSkippedWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	selected, err := parseScannerSelection("semgrep,bearer,cppcheck")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := scan(context.Background(), root, selected, func(progress.Event) {})
+	if err != nil || len(result.Scanners) != 3 {
+		t.Fatalf("code scan empty = %#v, %v", result, err)
+	}
+	for _, s := range result.Scanners {
+		if s.Status != "skipped" {
+			t.Fatalf("empty code scanner=%#v", s)
+		}
+	}
+}
+
+func TestCLIBearerSkippedOnServerArm64(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("git: %v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app.py"), []byte("print('hello')\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$1" in info) exit 0;; version) printf '{"Arch":"arm64"}'; exit 0;; esac
+exit 99
+`
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"--scanners", "bearer", root}, &stdout, &stderr, scan); code != 0 {
+		t.Fatalf("Bearer skip exit=%d stderr=%s", code, &stderr)
+	}
+	var result report.Report
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Scanners) != 1 || result.Scanners[0].Status != "skipped" || result.Scanners[0].Coverage.Unread != 1 || !strings.Contains(strings.Join(result.Scanners[0].Limitations, " "), "unsupported_runtime_arch") {
+		t.Fatalf("Bearer result=%#v", result)
+	}
+}
+
+// This verifies the adapter/CLI contract with synthetic process output. It never
+// launches Bearer; the network gate is needed only to prepare its pinned rules.
+func TestAcceptanceBearerCoverageContractWithFakeRuntime(t *testing.T) {
+	if os.Getenv("SECSCAN_ACCEPTANCE") != "1" {
+		t.Skip("set SECSCAN_ACCEPTANCE=1 to prepare pinned private rules")
+	}
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
+		t.Fatalf("git: %v %s", err, out)
+	}
+	for name, data := range map[string]string{"app.py": "eval(user_input)\n", "bundle.min.js": "eval(userInput);\n"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", home)
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$1" in
+ info|pull) exit 0;;
+ version) printf '{"Arch":"amd64"}'; exit 0;;
+ image) printf '%s\n' "$SECSCAN_TEST_IMAGE_ID"; exit 0;;
+esac
+case "$*" in
+ *"semgrep scan"*) printf '{"version":"1.176.0","results":[],"errors":[],"paths":{"scanned":["/target/app.py"]}}'; exit 0;;
+esac
+for arg in "$@"; do
+ case "$arg" in type=bind,src=*,dst=/out) output="${arg#type=bind,src=}"; output="${output%,dst=/out}"; printf '%s' "$SECSCAN_TEST_BEARER_REPORT" > "$output/result.sarif"; exit 0;; esac
+done
+exit 99
+`
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SECSCAN_TEST_IMAGE_ID", "sha256:"+strings.Repeat("a", 64))
+	var stderr bytes.Buffer
+	if code := run(context.Background(), []string{"update", "--scanners", "bearer,semgrep", root}, &bytes.Buffer{}, &stderr, scan); code != 0 {
+		t.Fatalf("prepare fake runtime exit=%d stderr=%s", code, &stderr)
+	}
+	clean := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Bearer","rules":[{"id":"python_lang_pickle"}]}},"results":null}]}`
+	t.Setenv("SECSCAN_TEST_BEARER_REPORT", clean)
+	var stdout bytes.Buffer
+	stderr.Reset()
+	if code := run(context.Background(), []string{"--scanners", "bearer", root}, &stdout, &stderr, scan); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "coverage_unconfirmed") {
+		t.Fatalf("empty Bearer exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(context.Background(), []string{"--scanners", "bearer,semgrep", root}, &stdout, &stderr, scan); code != 0 {
+		t.Fatalf("mixed scan exit=%d stderr=%s", code, &stderr)
+	}
+	var mixed report.Report
+	if err := json.Unmarshal(stdout.Bytes(), &mixed); err != nil {
+		t.Fatal(err)
+	}
+	for _, engine := range mixed.Scanners {
+		if engine.Name == "bearer" && (engine.Status != "failed" || engine.Coverage.Read != 0 || engine.Coverage.Unread != 2 || !slices.Equal(engine.Coverage.UnreadInputs, []string{"app.py", "bundle.min.js"}) || !strings.Contains(strings.Join(engine.Limitations, " "), "coverage_unconfirmed")) {
+			t.Fatalf("empty Bearer metadata=%#v", engine)
+		}
+	}
+	positive := strings.Replace(clean, `"results":null`, `"results":[{"ruleId":"python_lang_pickle","locations":[{"physicalLocation":{"artifactLocation":{"uri":"/target/app.py"},"region":{"startLine":1}}}]}]`, 1)
+	t.Setenv("SECSCAN_TEST_BEARER_REPORT", positive)
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(context.Background(), []string{"--scanners", "bearer", root}, &stdout, &stderr, scan); code != 0 {
+		t.Fatalf("positive Bearer exit=%d stderr=%s", code, &stderr)
+	}
+	var partial report.Report
+	if err := json.Unmarshal(stdout.Bytes(), &partial); err != nil {
+		t.Fatal(err)
+	}
+	if len(partial.Scanners) != 1 || len(partial.Findings) != 1 {
+		t.Fatalf("partial Bearer=%#v", partial)
+	}
+	engine := partial.Scanners[0]
+	if engine.Status != "success" || engine.Coverage.Read != 1 || !slices.Equal(engine.Coverage.ReadInputs, []string{"app.py"}) || engine.Coverage.Unread != 1 || !slices.Equal(engine.Coverage.UnreadInputs, []string{"bundle.min.js"}) {
+		t.Fatalf("positive Bearer metadata=%#v", engine)
 	}
 }

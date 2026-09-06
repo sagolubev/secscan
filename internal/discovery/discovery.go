@@ -24,6 +24,8 @@ type Inventory struct {
 	KICS         []string
 	Python       []string
 	TypeScript   []string
+	Bearer       []string
+	Cppcheck     []string
 	CI           []string
 	Zizmor       []string
 	Poutine      []string
@@ -91,6 +93,14 @@ func Discover(root string) (Inventory, error) {
 			inventory.KICS = append(inventory.KICS, path)
 		}
 
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".java", ".py", ".rb", ".rake", ".js", ".jsx", ".ts", ".tsx", ".php", ".go", ".go2":
+			inventory.Bearer = append(inventory.Bearer, path)
+		}
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx":
+			inventory.Cppcheck = append(inventory.Cppcheck, path)
+		}
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".py", ".pyi":
 			inventory.Python = append(inventory.Python, path)

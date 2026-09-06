@@ -45,6 +45,7 @@ var ruleMessages = map[string]string{
 	"secscan.typescript.weak-token-randomness": "weak randomness for security token",
 }
 
+// Parse normalizes the shared rule pack. An empty language derives it from the rule.
 func Parse(data []byte, language string) (Parsed, error) {
 	var input scanResult
 	if err := json.Unmarshal(data, &input); err != nil {
@@ -65,10 +66,14 @@ func Parse(data []byte, language string) (Parsed, error) {
 		if err != nil {
 			return Parsed{}, err
 		}
+		findingLanguage := language
+		if findingLanguage == "" {
+			findingLanguage = strings.Split(ruleID, ".")[1]
+		}
 		sum := sha256.Sum256([]byte(fmt.Sprintf(
 			"%s\x00%s\x00%s\x00%d\x00%d",
 			ruleID,
-			language,
+			findingLanguage,
 			filePath,
 			item.Start.Line,
 			item.End.Line,
@@ -83,7 +88,7 @@ func Parse(data []byte, language string) (Parsed, error) {
 			Fingerprint: hex.EncodeToString(sum[:]),
 			Sources:     []string{"opengrep"},
 			Origin:      "working_tree",
-			Language:    language,
+			Language:    findingLanguage,
 			Severity:    strings.ToLower(item.Extra.Severity),
 		})
 	}

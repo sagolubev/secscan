@@ -99,3 +99,19 @@ func TestDependencyAliasMergeTransitiveAndStable(t *testing.T) {
 		t.Fatal("Marshal mutated input")
 	}
 }
+
+func TestCodeMergePreservesFingerprint(t *testing.T) {
+	original := Finding{Kind: "code", RuleID: "secscan.python.dynamic-code-execution", Language: "python", Path: "app.py", Line: 3, EndLine: 3, Fingerprint: "existing-fingerprint", Sources: []string{"opengrep"}}
+	semgrep := original
+	semgrep.Sources = []string{"semgrep"}
+	other := original
+	other.Line = 4
+	other.Fingerprint = "other-fingerprint"
+	got := Normalize([]Finding{original, semgrep, other})
+	if len(got) != 2 || !slices.Equal(got[0].Sources, []string{"opengrep", "semgrep"}) || got[0].Fingerprint != original.Fingerprint {
+		t.Fatalf("Normalize shared rules = %#v, want merged sources with original fingerprint", got)
+	}
+	if len(original.Sources) != 1 {
+		t.Fatal("Normalize mutated original sources")
+	}
+}

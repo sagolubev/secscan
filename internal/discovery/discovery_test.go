@@ -216,3 +216,18 @@ func TestDependencyDiscovery(t *testing.T) {
 		t.Fatal("wrong ecosystem classification")
 	}
 }
+
+func TestCodeScannerInventory(t *testing.T) {
+	root := newGitRepository(t)
+	for _, name := range []string{"app.py", "app.ts", "App.java", "app.rb", "app.js", "app.php", "app.go", "safe.cpp", "include.h", "ignored.c", "bearer.yml", "Makefile"} {
+		writeFile(t, root, name, "synthetic")
+	}
+	writeFile(t, root, ".gitignore", "ignored.c\n")
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Bearer) != 7 || !reflect.DeepEqual(got.Cppcheck, []string{"include.h", "safe.cpp"}) {
+		t.Fatalf("code inventory=%#v", got)
+	}
+}

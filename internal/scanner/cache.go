@@ -21,10 +21,11 @@ type Cache struct{ Root string }
 
 // Asset identifies one prepared engine and its optional advisory feeds.
 type Asset struct {
-	ImageID    string          `json:"imageID"`
-	ImageRef   string          `json:"imageRef"`
-	PreparedAt time.Time       `json:"preparedAt"`
-	Feeds      map[string]Feed `json:"feeds,omitempty"`
+	ImageID    string                `json:"imageID"`
+	ImageRef   string                `json:"imageRef"`
+	PreparedAt time.Time             `json:"preparedAt"`
+	Static     map[string]StaticFile `json:"static,omitempty"`
+	Feeds      map[string]Feed       `json:"feeds,omitempty"`
 }
 
 // Feed describes a file within a published cache generation.
@@ -121,6 +122,13 @@ func (c Cache) Update(ctx context.Context, prepare Prepare) error {
 			}
 			feed.Path = filepath.Join(filepath.Base(staging), feed.Path)
 			asset.Feeds[key] = feed
+		}
+		for key, file := range asset.Static {
+			if err := verifyStatic(staging, file); err != nil {
+				return err
+			}
+			file.Path = filepath.Join(filepath.Base(staging), file.Path)
+			asset.Static[key] = file
 		}
 		prior[name] = asset
 	}

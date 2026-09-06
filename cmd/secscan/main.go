@@ -151,7 +151,10 @@ func scan(
 		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
 		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
 		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0 ||
-		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0
+		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0 ||
+		slices.Contains(selection, "semgrep") && len(inventory.Python)+len(inventory.TypeScript) > 0 ||
+		slices.Contains(selection, "bearer") && len(inventory.Bearer) > 0 ||
+		slices.Contains(selection, "cppcheck") && len(inventory.Cppcheck) > 0
 	var runtime container.Runtime
 	if needsRuntime {
 		runtime, err = container.DetectDefault(ctx)
@@ -274,12 +277,19 @@ func scan(
 		})
 	}
 
-	for _, name := range []string{"zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner"} {
+	for _, name := range []string{"zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner", "semgrep", "bearer", "cppcheck"} {
 		if !slices.Contains(selection, name) {
 			continue
 		}
 		files := inventory.Zizmor
 		switch name {
+		case "semgrep":
+			files = append(append([]string(nil), inventory.Python...), inventory.TypeScript...)
+			slices.Sort(files)
+		case "bearer":
+			files = inventory.Bearer
+		case "cppcheck":
+			files = inventory.Cppcheck
 		case "poutine":
 			files = inventory.Poutine
 		case "checkov":
@@ -302,6 +312,17 @@ func scan(
 			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 			continue
 		}
+		if name == "bearer" {
+			arch, err := scanner.RuntimeArchitecture(ctx, runtime)
+			if err != nil {
+				return report.Report{}, err
+			}
+			if arch != "amd64" {
+				skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", EngineVersion: scanner.Catalog()[name].Version, Coverage: report.Coverage{Unit: "files", Unread: len(files), UnreadInputs: files}, Limitations: []string{"unsupported_runtime_arch: " + arch + "; Bearer requires native amd64; emulation disabled"}})
+				emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+				continue
+			}
+		}
 		if cacheErr != nil {
 			preparationErrors[name] = cacheErr
 		} else if name == "trivy" || name == "grype" || name == "osv-scanner" {
@@ -321,6 +342,9 @@ func scan(
 			if name == "checkov" || name == "checkov-terraform" || name == "kics" {
 				return scanner.ScanIaC(ctx, runtime, cache, name, root, files, emit)
 			}
+			if name == "semgrep" || name == "bearer" || name == "cppcheck" {
+				return scanner.ScanCode(ctx, runtime, cache, name, root, files, emit)
+			}
 			return scanner.ScanCI(ctx, runtime, cache, name, root, files, emit)
 		}})
 	}
@@ -333,12 +357,20 @@ func scan(
 			result.Scanners[i].Coverage.FailedInputs = append([]string(nil), inventory.Dependencies...)
 			result.Scanners[i].Coverage.FailedFiles = len(inventory.Dependencies)
 		}
+		if result.Scanners[i].Status == "failed" && name == "bearer" {
+			result.Scanners[i].Coverage.UnreadInputs = append([]string(nil), inventory.Bearer...)
+			result.Scanners[i].Coverage.Unread = len(inventory.Bearer)
+			result.Scanners[i].Limitations = []string{"Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence; selected inputs remain unread"}
+		}
 		if preparationErrors[result.Scanners[i].Name] != nil {
 			result.Scanners[i].Limitations = []string{"prepared assets unavailable; run secscan update"}
 		}
 	}
 	if result.Successes == 0 && len(preparationErrors) > 0 {
 		return report.Report{}, fmt.Errorf("prepared assets unavailable; run secscan update: %w", orchestrator.ErrAllScannersFailed)
+	}
+	if result.Successes == 0 && len(selection) == 1 && selection[0] == "bearer" && len(skipped) == 0 {
+		return report.Report{}, fmt.Errorf("Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence: %w", orchestrator.ErrAllScannersFailed)
 	}
 	return buildReport(
 		root,
@@ -373,7 +405,7 @@ func buildReport(
 }
 
 func parseScannerSelection(value string) ([]string, error) {
-	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner"}
+	allowed := []string{"gitleaks", "python-sast", "typescript-sast", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner", "semgrep", "bearer", "cppcheck"}
 	if value == "all" {
 		return allowed, nil
 	}

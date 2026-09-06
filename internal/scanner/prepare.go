@@ -28,10 +28,20 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			if _, ok := result[key]; ok {
 				continue
 			}
+			if key == "bearer" {
+				arch, err := RuntimeArchitecture(ctx, runtime)
+				if err != nil {
+					return nil, err
+				}
+				if arch != "amd64" {
+					continue
+				}
+			}
 			var id, ref string
 			var err error
+			var static map[string]StaticFile
 			switch key {
-			case "gitleaks", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner":
+			case "semgrep", "bearer", "gitleaks", "zizmor", "poutine", "checkov", "checkov-terraform", "kics", "trivy", "grype", "osv-scanner":
 				ref = gitleaks.Image
 				if key != "gitleaks" {
 					ref = Catalog()[key].Image
@@ -41,6 +51,9 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 					data, err = runtime.Output(ctx, "image", "inspect", "--format", "{{.Id}}", ref)
 					id = strings.TrimSpace(string(data))
 				}
+			case "cppcheck":
+				ref = cppcheckImage
+				static, id, err = prepareCodeAssets(ctx, runtime, key, staging)
 			case "opengrep":
 				ref = opengrep.ImageTag
 				id, err = opengrep.EnsureImage(ctx, runtime)
@@ -50,7 +63,13 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 			if err != nil {
 				return nil, fmt.Errorf("prepare %s: %w", name, err)
 			}
-			asset := Asset{ImageID: id, ImageRef: ref}
+			asset := Asset{ImageID: id, ImageRef: ref, Static: static}
+			if key == "bearer" {
+				asset.Static, _, err = prepareCodeAssets(ctx, runtime, key, staging)
+				if err != nil {
+					return nil, err
+				}
+			}
 			if key == "trivy" || key == "grype" || key == "osv-scanner" {
 				files, _ := DependencyInputs(inventory.Dependencies)
 				asset.Feeds, err = prepareDependencyFeeds(ctx, runtime, key, id, staging, files)
@@ -104,6 +123,9 @@ func (c Cache) Resolve(ctx context.Context, runtime container.Runtime, name stri
 		if err := VerifyFeed(c.Root, feed, time.Now().UTC()); err != nil {
 			return Asset{}, err
 		}
+	}
+	if err := verifyCodeAssets(c.Root, name, asset); err != nil {
+		return Asset{}, err
 	}
 	return asset, nil
 }

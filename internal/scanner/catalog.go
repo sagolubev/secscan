@@ -9,6 +9,7 @@ type Pin struct {
 // Catalog returns the finite external scanner pins.
 func Catalog() map[string]Pin {
 	return map[string]Pin{
+		"cppcheck":          {Version: "2.21.1", Image: cppcheckImage},
 		"semgrep":           {Version: "1.176.0", Image: "docker.io/semgrep/semgrep@sha256:e5ea1a270ca5557a114ae7a30a8f860cc16a924f8df85cd975688f17c7c97731"},
 		"trivy":             {Version: "0.74.0", Image: "ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
 		"grype":             {Version: "0.118.0", Image: "ghcr.io/anchore/grype@sha256:7e89e67dea1955928a967e39e42c133f7705f50587cf640aace84a9df8aba25c"},

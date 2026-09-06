@@ -75,3 +75,18 @@ func TestContainerArgsUseOfflineLanguageRules(t *testing.T) {
 		}
 	}
 }
+
+func TestParseInfersSharedRuleLanguage(t *testing.T) {
+	data := []byte(`{"version":"1.176.0","results":[{"check_id":"secscan.python.dynamic-code-execution","path":"/target/app.py","start":{"line":1},"end":{"line":1},"extra":{"severity":"ERROR"}}],"errors":[]}`)
+	inferred, err := Parse(data, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicit, err := Parse(data, "python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inferred.Findings[0].Fingerprint != explicit.Findings[0].Fingerprint || inferred.Findings[0].Language != "python" {
+		t.Fatalf("inferred finding=%#v want %#v", inferred.Findings[0], explicit.Findings[0])
+	}
+}
