@@ -3,12 +3,16 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.21",
-  "baselineCommit": "4a77cf717084db3ea90069ce71f83c875a90a95b",
+  "targetOutcome": "secscan-ij8.24",
+  "baselineCommit": "66525fd3d2e2c07a8cb464fb2588729bbf9f61a7",
   "scope": {
     "implementation": [
-      "internal/report/",
-      "cmd/secscan/"
+      "internal/container/",
+      "internal/scanner/",
+      "internal/gitleaks/",
+      "cmd/secscan/",
+      ".github/workflows/ci.yml",
+      ".github/scripts/"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -59,8 +63,15 @@
     {
       "requirement": "Container runtime",
       "scenario": "Rootless runtime",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.24"
+      "disposition": "target",
+      "components": [
+        "internal/container/runtime.go",
+        "internal/container/namespace.go"
+      ],
+      "tests": [
+        "internal/container/namespace_test.go",
+        "internal/container/namespace_acceptance_test.go"
+      ]
     },
     {
       "requirement": "Container runtime",
@@ -1459,6 +1470,32 @@
         "internal/report/budget_test.go",
         "cmd/secscan/budget_test.go"
       ]
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Namespace transport boundary",
+      "disposition": "target",
+      "components": [
+        "internal/container/runtime.go",
+        "internal/container/namespace.go"
+      ],
+      "tests": [
+        "internal/container/namespace_test.go",
+        "internal/container/namespace_acceptance_test.go"
+      ]
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Explicit runtime selection",
+      "disposition": "target",
+      "components": [
+        "internal/container/runtime.go",
+        "internal/container/namespace.go"
+      ],
+      "tests": [
+        "internal/container/namespace_test.go",
+        "internal/container/namespace_acceptance_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1481,12 +1518,14 @@
         ]
       },
       {
-        "name": "existing-report-boundary",
+        "name": "existing-runtime-boundary",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/report",
+          "./internal/container",
+          "./internal/scanner",
+          "./internal/gitleaks",
           "./cmd/secscan",
           "-count=1"
         ]
@@ -1494,12 +1533,14 @@
     ],
     "target": [
       {
-        "name": "budget-focused",
+        "name": "namespace-focused",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/report",
+          "./internal/container",
+          "./internal/scanner",
+          "./internal/gitleaks",
           "./cmd/secscan",
           "-count=1"
         ]

@@ -52,7 +52,7 @@ func platformCLI(t *testing.T, data string) string {
 	script := `#!/bin/sh
 printf '%s\n' "$*" >> "$SECSCAN_PLATFORM_CALLS"
 case "$1" in
-info) exit 0;;
+info) printf '[]'; exit 0;;
 version) printf '%s' "$SECSCAN_TEST_PLATFORM"; exit 0;;
 pull) exit 0;;
 image) printf 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; exit 0;;
@@ -98,7 +98,7 @@ func TestPlatformAliasesAndOCI(t *testing.T) {
 		}
 	}
 	calls, err := os.ReadFile(log)
-	if err != nil || string(calls) != "info\nversion --format {{json .Server}}\n" {
+	if err != nil || string(calls) != "info --format {{json .SecurityOptions}}\nversion --format {{json .Server}}\n" {
 		t.Errorf("alias gate runtime calls = %q, %v; want no engine operations", calls, err)
 	}
 }
@@ -229,7 +229,7 @@ func TestPlatformSkipsPreserveScopesAndNativeSibling(t *testing.T) {
 		}
 	}
 	calls, err := os.ReadFile(log)
-	if err != nil || string(calls) != "info\nversion --format {{json .Server}}\n" {
+	if err != nil || string(calls) != "info --format {{json .SecurityOptions}}\nversion --format {{json .Server}}\n" {
 		t.Errorf("unsupported runtime calls = %q, %v; want only detection and one server query", calls, err)
 	}
 }
@@ -261,7 +261,7 @@ func TestPlatformHistoryAndMalformedMetadata(t *testing.T) {
 				}
 			}
 			calls, err := os.ReadFile(log)
-			if err != nil || string(calls) != "info\nversion --format {{json .Server}}\n" {
+			if err != nil || string(calls) != "info --format {{json .SecurityOptions}}\nversion --format {{json .Server}}\n" {
 				t.Errorf("history unsupported calls = %q, %v", calls, err)
 			}
 			if !strings.Contains(data, "windows") {

@@ -1074,3 +1074,73 @@ and unchanged HTML/full exports. Fresh unit/full checks and independent review
 are required. Least confident: byte units are intentionally conservative and
 can remove more than a provider tokenizer would; document that limitation next
 to the flag, and add a model-specific counter only with a future concrete need.
+
+
+## Namespace-safe container payloads
+
+Outcome .24 keeps Feature/Standard/Comprehensive and extends the already tested
+container seam. Native probes on an owned Linux arm64 VM proved Docker29.5.2
+userns-remap and rootless with systemd cgroups, plus Podman4.9.3 rootless with
+cgroupfs. Private directories700/files600, numeric scanner UID/GID, CapEff0,
+NoNewPrivs1, denied repository writes, Gitleaks JSON and copied-back cache reuse
+passed. A local Kern project card was reviewed; replacing Docker/Podman is not
+this contract. Reuse native volume/cp operations; no dependency or UID arithmetic.
+
+DetectDefault retains Docker-then-Podman unless SECSCAN_RUNTIME explicitly names
+one of them. A requested unavailable backend does not fall back. Read bounded
+Docker SecurityOptions (name=userns/name=rootless) or Podman Host.Security.Rootless
+metadata and fail on malformed responses. Store this immutable decision in the
+concrete Runtime. Ordinary rootful bind behavior stays unchanged. Namespace
+transport is a private common run boundary, not duplicated in scanner adapters.
+Expose the detected mode for acceptance assertions. Direct non-run operations
+(image inspect/pull/build/save) retain their normal client behavior.
+
+For each namespaced run with binds, parse only the internally generated finite
+run flags and bind mount syntax. Require an explicit numeric UID:GID and keep it.
+Create a random owned volume per source, then a never-started helper using the
+already prepared scanner image and the same user, no network, read-only rootfs,
+cap-drop ALL and no-new-privileges. Copy each complete file/directory to a private
+payload child under its volume mount. Docker copy-in requires --archive=false;
+Podman requires --archive=true: native counterexamples proved the opposite flag
+makes private input unreadable. Inspect each owned volume's absolute Mountpoint
+and bind its payload at the original scanner destination. Keep helper references
+until the run ends so pruning cannot remove the volume. No host chmod/chown,
+helper process, additional capabilities, userns=host or socket mount is needed.
+
+Preserve all scanner flags, network policy and numeric user. Retain the stopped
+scanner until writable outputs are copied back; remove --rm only inside this
+owned lifecycle. Current writable callers use fresh empty owned directories
+(output and cache-generation staging); require that invariant before namespace
+execution rather than implement a general bidirectional filesystem synchronizer.
+Read-only binds can be files or directories and are never copied back. Existing
+published cache generations remain immutable and reusable as read-only inputs.
+
+Copy-out uses native cp --archive=false to a tar stdout stream. Extract through
+standard archive/tar into the pinned writable root, accepting only local regular
+files/directories, no links/special entries, and exclusive new files with private
+modes. Bound aggregate payload to8GiB and100000 entries per mount; validate input
+sources against the same limits. These bounds include advisory databases and
+repository snapshots; reject oversize data explicitly. A transfer error may
+leave partial data only in the owned staging directory; adapters/Cache.Update
+already discard failed stages and never publish their manifest. Do not expose
+raw tar bytes, source snippets or daemon diagnostics in errors. Preserve ordinary
+scanner exit status only when transfers and cleanup succeeded; a joined copy
+error must not be mistaken for an expected finding ExitError by OutputStatus.
+
+Cancellation skips output transfer, removes the scanner and helper and then all
+owned volumes with a bounded cleanup context. Return cleanup failures explicitly.
+Keep names random and reject caller-provided names. Validate mount paths and
+metadata before interpolation into native argv; no shell command construction.
+Use existing stdlib process/context and pinned-root filesystem patterns.
+
+Native acceptance must exercise the final Go boundary with Docker remap,
+Docker rootless and Podman rootless, not only fixtures or transport probes.
+Assert actual detected mode, private directory/file input, read-only denial,
+empty writable stage ownership, cache re-read in a second run, real Gitleaks,
+cancellation and absence of owned containers/volumes. Keep standard rootful
+acceptance and add a dedicated CI runtime matrix. Verify malformed metadata,
+transfer/cleanup failures, traversal/links/duplicates/limits and exit-code safety
+with focused tests, then full existing gates and independent security review.
+Rollback reverts this additive transport/selection commit; cache format stays
+unchanged. Least confident: daemon cp ownership semantics differ by backend;
+native regression checks, not shared flag assumptions, protect this decision.

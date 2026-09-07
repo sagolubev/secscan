@@ -1,3 +1,23 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Run container clients with bounded output and owned cancellation cleanup.
+// SCOPE: Preserve scanner exit status only after namespace transfers and cleanup succeed.
+// DEPENDS: internal/container/namespace.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-container-runtime, internal/container/namespace_test.go#TestNamespaceSelectionRejectsUnknownBackend
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Runtime - Hold the selected client and validated namespace mode.
+// Detect - Discover an available runtime through supplied lookup and probe functions.
+// Runtime.Run - Run without exposing scanner output.
+// Runtime.RunDiagnostic - Capture bounded maintenance diagnostics.
+// Runtime.Output - Read bounded stdout.
+// IsolatedArgs - Build the standard offline scanner boundary.
+// Runtime.OutputRejecting - Reject known operational diagnostic markers.
+// Runtime.OutputStatus - Preserve expected scanner exit codes after safe execution.
+// limitedBuffer.Write - Retain at most the scanner output limit.
+// END_MODULE_MAP
+
 package container
 
 import (
@@ -15,7 +35,9 @@ import (
 )
 
 type Runtime struct {
-	Binary string
+	Binary    string
+	namespace string
+	backend   string
 }
 
 func Detect(
@@ -34,26 +56,9 @@ func Detect(
 			failures = append(failures, fmt.Errorf("%s unavailable: %w", name, err))
 			continue
 		}
-		return Runtime{Binary: path}, nil
+		return Runtime{Binary: path, backend: name}, nil
 	}
 	return Runtime{}, fmt.Errorf("container runtime unavailable: %w", errors.Join(failures...))
-}
-
-func DetectDefault(ctx context.Context) (Runtime, error) {
-	return Detect(ctx, exec.LookPath, func(ctx context.Context, binary string) error {
-		output, err := exec.CommandContext(ctx, binary, "info").CombinedOutput()
-		if err == nil {
-			return nil
-		}
-		detail := strings.TrimSpace(string(output))
-		if len(detail) > 512 {
-			detail = detail[:512]
-		}
-		if detail == "" {
-			return err
-		}
-		return fmt.Errorf("%w: %s", err, detail)
-	})
 }
 
 func (runtime Runtime) Run(ctx context.Context, args []string) error {
@@ -87,7 +92,7 @@ func (runtime Runtime) Output(ctx context.Context, args ...string) ([]byte, erro
 	if output.exceeded {
 		return nil, fmt.Errorf("scanner output exceeds 64 MiB limit")
 	}
-	return output.Bytes(), nil
+	return runtime.imageInspectOutput(args, output.Bytes())
 }
 
 // IsolatedArgs returns the common offline boundary with the invoking user identity.
@@ -174,6 +179,7 @@ func (runtime Runtime) execute(ctx context.Context, args []string, stdout, stder
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	args = runtime.buildArgs(args)
 	name := ""
 	if len(args) > 0 && args[0] == "run" {
 		for _, arg := range args[1:] {
@@ -186,6 +192,9 @@ func (runtime Runtime) execute(ctx context.Context, args []string, stdout, stder
 			return fmt.Errorf("create container identity: %w", err)
 		}
 		name = "secscan-run-" + hex.EncodeToString(nonce[:])
+		if runtime.namespace != "" {
+			return runtime.executeNamespace(ctx, args, name, stdout, stderr)
+		}
 		args = append([]string{"run", "--name", name}, args[1:]...)
 	}
 	command := exec.CommandContext(ctx, runtime.Binary, args...)
@@ -199,9 +208,70 @@ func (runtime Runtime) execute(ctx context.Context, args []string, stdout, stder
 	if name != "" {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if removeErr := exec.CommandContext(cleanup, runtime.Binary, "rm", "--force", name).Run(); removeErr != nil {
+		if removeErr := runtime.removeOwned(cleanup, name); removeErr != nil {
 			cleanupErr = fmt.Errorf("owned container cleanup could not be confirmed: %w", removeErr)
 		}
 	}
 	return errors.Join(ctx.Err(), err, cleanupErr)
+}
+
+// removeOwned skips Podman's default ten-second stop grace. These are our
+// disposable scanner/helper containers; cancellation must terminate them now.
+func (runtime Runtime) removeOwned(ctx context.Context, name string) error {
+	args := []string{"rm", "--force"}
+	if runtime.backend == "podman" {
+		args = append(args, "--time", "0")
+	}
+	return runtime.command(ctx, append(args, name), nil, io.Discard, io.Discard)
+}
+
+// imageInspectOutput canonicalizes the one generated image-inspection format;
+// scanner output and other formats never pass through image-ID normalization.
+func (runtime Runtime) imageInspectOutput(args []string, data []byte) ([]byte, error) {
+	if runtime.backend != "podman" || len(args) != 5 || args[0] != "image" || args[1] != "inspect" || args[2] != "--format" || (args[3] != "{{.Id}}" && !strings.HasPrefix(args[3], "{{.Id}} ")) {
+		return data, nil
+	}
+	fields := bytes.Fields(data)
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("invalid immutable container image ID")
+	}
+	id := string(fields[0])
+	digest := strings.TrimPrefix(id, "sha256:")
+	if len(digest) != 64 {
+		return nil, fmt.Errorf("invalid immutable container image ID")
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return nil, fmt.Errorf("invalid immutable container image ID")
+	}
+	if strings.HasPrefix(id, "sha256:") {
+		return data, nil
+	}
+	offset := bytes.Index(data, fields[0])
+	return []byte(string(data[:offset]) + "sha256:" + string(data[offset:])), nil
+}
+
+// buildArgs preserves Docker's existing explicit-update build policy in Podman:
+// pull missing bases, omit disabled BuildKit provenance, keep all other argv.
+func (runtime Runtime) buildArgs(args []string) []string {
+	if runtime.backend != "podman" || len(args) == 0 || args[0] != "build" {
+		return args
+	}
+	result := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--provenance=false":
+			continue
+		case "--pull=false":
+			result = append(result, "--pull=missing")
+		case "--build-arg", "--build-context", "--tag", "--file":
+			result = append(result, args[i])
+			if i+1 < len(args) {
+				i++
+				result = append(result, args[i])
+			}
+		default:
+			result = append(result, args[i])
+		}
+	}
+	return result
 }

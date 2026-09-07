@@ -39,6 +39,20 @@
 #### Scenario: Rootless runtime
 - **WHEN** daemon использует user namespace remapping или rootless mode
 - **THEN** созданные cache artifacts остаются доступны текущему host user
+- **AND** private input directories/files остаются читаемыми scanner без изменения исходных permissions, namespace mapping или numeric scanner user
+
+#### Scenario: Namespace transport boundary
+- **WHEN** используется Docker rootless/userns-remap или Podman rootless
+- **THEN** scanner получает отдельные принадлежащие запуску volume payloads с прежними read-only/writable boundaries; read-only inputs не копируются обратно
+- **AND** copy-out принимает только ограниченное дерево regular files/directories, не следует symlinks/hardlinks и сохраняет ownership текущего host user
+- **AND** cancellation, failed transfer и cleanup failure не превращаются в успешный scan или опубликованный cache manifest; удаляются только ресурсы своего запуска
+
+#### Scenario: Explicit runtime selection
+- **WHEN** `SECSCAN_RUNTIME` равен docker или podman
+- **THEN** используется только выбранный backend без fallback; неизвестное значение отклоняется
+- **WHEN** переменная отсутствует
+- **THEN** сохраняется прежний порядок Docker, затем Podman
+- **AND** namespace mode берётся из проверенного daemon metadata, а не из host OS или UID
 
 #### Scenario: Runtime unavailable
 - **WHEN** ни Docker, ни Podman daemon недоступны
