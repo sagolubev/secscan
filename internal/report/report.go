@@ -1,7 +1,7 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Normalize scanner findings and encode the canonical JSON report.
 // SCOPE: Keep deterministic identities and ordering; preserve source coverage independently of findings.
-// DEPENDS: internal/report/inventory.go, internal/report/trivy.go
+// DEPENDS: internal/report/inventory.go, internal/report/trivy.go, internal/report/filter.go
 // LINKS: openspec/changes/build-secscan/trace.json, internal/report/report_test.go#TestMarshalSortsFindings, internal/report/report_test.go#TestDependencyAliasMergeTransitiveAndStable
 // ROLE: RUNTIME
 // MAP_MODE: EXPORTS
@@ -34,6 +34,7 @@ import (
 )
 
 type Report struct {
+	Filtering       *FilterSummary   `json:"filtering,omitempty"`
 	Baseline        *BaselineSummary `json:"baseline,omitempty"`
 	Inventory       *Inventory       `json:"inventory,omitempty"`
 	UncheckedInputs []UncheckedInput `json:"uncheckedInputs,omitempty"`
@@ -146,10 +147,10 @@ func Marshal(input Report) ([]byte, error) {
 
 func canonicalReport(input Report) Report {
 	result := input
-	if input.Baseline == nil {
+	if input.Baseline == nil && input.Filtering == nil {
 		result.Findings = Normalize(input.Findings)
 	} else {
-		// Comparison fragments keep the original finding fingerprint and must not merge.
+		// Filtering fragments keep the original finding fingerprint and must not merge.
 		result.Findings = append([]Finding(nil), input.Findings...)
 	}
 	result.Scanners = append([]Scanner(nil), input.Scanners...)

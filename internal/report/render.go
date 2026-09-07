@@ -47,7 +47,7 @@ func HTML(input Report) ([]byte, error) {
 
 // SARIF encodes an unfiltered scan, including failed and incomplete analysis evidence.
 func SARIF(input Report) ([]byte, error) {
-	if input.Baseline != nil {
+	if input.Baseline != nil || input.Filtering != nil {
 		return nil, fmt.Errorf("SARIF requires the unfiltered scan")
 	}
 	view := canonicalReport(input)
@@ -165,6 +165,7 @@ const htmlDocument = `<!doctype html>
 <section class="summary" aria-label="Summary"><div class="metric"><strong>{{len .Findings}}</strong><span>Visible findings</span></div><div class="metric"><strong>{{len .Scanners}}</strong><span>Scanner outcomes</span></div><div class="metric"><strong>{{len .UncheckedInputs}}</strong><span>Inputs without confirmed analysis</span></div></section>
 <p class="muted">Finding counts do not measure coverage. Review scanner outcomes and unchecked inputs before drawing conclusions.</p>
 {{if .Baseline}}<p>Baseline comparison: {{.Baseline.New}} new, {{.Baseline.Expanded}} expanded, {{.Baseline.Unchanged}} unchanged, {{.Baseline.Exempt}} exempt.</p>{{end}}
+{{if .Filtering}}<section><h2>Applied filters</h2><p>{{.Filtering.InputFindings}} original findings; {{.Filtering.OutputFragments}} visible fragments. Counts below show removed elements.</p><div class="table-wrap"><table><thead><tr><th>Stage</th><th>Findings</th><th>Places</th><th>Advisories</th><th>Occurrences</th></tr></thead><tbody>{{range .Filtering.Stages}}<tr><td>{{.Name}}{{if .RuleID}} / {{.RuleID}}{{end}}</td><td>{{.Findings}}</td><td>{{.Places}}</td><td>{{.Advisories}}</td><td>{{.Occurrences}}</td></tr>{{end}}</tbody></table></div></section>{{end}}
 <section><h2>Scanner coverage</h2><div class="table-wrap"><table><thead><tr><th>Scanner</th><th>Status</th><th>Read</th><th>Failed</th><th>Evidence</th></tr></thead><tbody>
 {{range .Scanners}}<tr><td>{{.Name}}</td><td>{{.Status}}</td><td>{{.Coverage.Read}} {{.Coverage.Unit}}</td><td>{{.Coverage.Failed}}</td><td>{{range .Limitations}}<p>{{.}}</p>{{end}}<details><summary>Inspect coverage</summary><pre>{{json .}}</pre></details></td></tr>{{else}}<tr><td colspan="5">No scanner evidence is available.</td></tr>{{end}}
 </tbody></table></div></section>

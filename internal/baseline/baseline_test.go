@@ -19,6 +19,8 @@
 // TestCompareReturnedDataDoesNotAliasInputs - Isolate nested returned collections.
 // TestCompareSharedCodeKeepsLineage - Preserve origins and images before comparing.
 // TestCompareSharedCodeRetainsSeverityAliases - Retain higher scanner severity.
+// TestCompareFragmentsPreservesSubtraction - Never reconstruct removed pairs.
+// TestCompareFragmentsBoundary - Validate and isolate existing fragments.
 // codeFinding - Build a synthetic source finding.
 // dependencyFinding - Build a normalized synthetic dependency finding.
 // snapshotFor - Encode and decode a real snapshot for comparison tests.
@@ -340,5 +342,54 @@ func TestCompareSharedCodeRetainsSeverityAliases(t *testing.T) {
 				t.Errorf("Compare(shared code severity %s) = %#v, %#v, %v, want expanded with higher scanner severity", severity, got, summary, err)
 			}
 		})
+	}
+}
+
+func TestCompareFragmentsPreservesSubtraction(t *testing.T) {
+	full := dependencyFinding([]string{"CVE-A", "CVE-B"}, "a/lock.json", "b/lock.json")
+	left, right := full, full
+	left.Locations = []report.Location{{Path: "b/lock.json", Line: 1}}
+	left.Path = "b/lock.json"
+	right.Advisories = []string{"CVE-B"}
+	right.Locations = []report.Location{{Path: "a/lock.json", Line: 1}}
+	got, summary, err := CompareFragments([]report.Finding{left, right}, snapshotFor(t))
+	if err != nil || len(got) != 2 || summary.InputFindings != 2 || summary.New != 2 {
+		t.Fatalf("CompareFragments(subtracted rectangle) = %#v, %#v, %v, want two separate fragments", got, summary, err)
+	}
+	pairs := make(map[string]bool)
+	for _, f := range got {
+		if f.Fingerprint != full.Fingerprint {
+			t.Error("CompareFragments() recomputed original fingerprint")
+		}
+		for _, id := range f.Advisories {
+			for _, location := range f.Locations {
+				pairs[id+"@"+location.Path] = true
+			}
+		}
+	}
+	want := map[string]bool{"CVE-A@b/lock.json": true, "CVE-B@b/lock.json": true, "CVE-B@a/lock.json": true}
+	if !reflect.DeepEqual(pairs, want) {
+		t.Errorf("CompareFragments() pairs = %#v, want %#v", pairs, want)
+	}
+}
+
+func TestCompareFragmentsBoundary(t *testing.T) {
+	input := []report.Finding{dependencyFinding([]string{"CVE-A"}, "a/lock.json")}
+	before, _ := json.Marshal(input)
+	got, _, err := CompareFragments(input, snapshotFor(t))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("CompareFragments(valid) = %#v, %v, want one finding", got, err)
+	}
+	got[0].Package.Name, got[0].Sources[0], got[0].Advisories[0], got[0].Locations[0].Path = "mutated", "mutated", "mutated", "mutated"
+	after, _ := json.Marshal(input)
+	if !bytes.Equal(before, after) {
+		t.Error("CompareFragments() output aliases its input")
+	}
+	input[0].Fingerprint = "invalid"
+	if _, _, err := CompareFragments(input, snapshotFor(t)); err == nil {
+		t.Error("CompareFragments(invalid fingerprint) succeeded")
+	}
+	if _, _, err := CompareFragments(nil, Snapshot{}); err == nil {
+		t.Error("CompareFragments(invalid snapshot) succeeded")
 	}
 }

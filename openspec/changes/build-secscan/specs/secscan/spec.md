@@ -183,15 +183,25 @@
 #### Scenario: Exempt findings
 - **WHEN** finding имеет kind `error` или `secret`
 - **THEN** она не скрывается project suppression, baseline или test-data filter
+- **AND** severity floor также сохраняет secret/error findings
 
 #### Scenario: Strict project configuration
 - **WHEN** `.secscan.toml` содержит неизвестный key или некорректное правило
 - **THEN** scan завершается configuration error вместо молчаливого игнорирования
+- **AND** version=1, bounded regular-file input, selector grammar и уникальные suppression ids проверяются до запуска scanners
+- **AND** parser errors не раскрывают содержимое config; --config выбирает явный файл, --no-config отключает project policy
 
 #### Scenario: Suppression accounting
 - **WHEN** suppression удаляет finding целиком или частично
 - **THEN** summary считает удалённые findings, places и advisories
 - **AND** один элемент учитывается только первым применившимся механизмом
+- **AND** partial advisory/location combinations сохраняются отдельными fragments с исходным fingerprint и счётчиком removed occurrences
+
+#### Scenario: Ordered visible filtering
+- **WHEN** одновременно заданы project rules, baseline, severity floor или test-data paths
+- **THEN** видимый report применяет их в указанном порядке с отдельными counts каждого этапа
+- **AND** unknown severity, scanner coverage и inventory не превращаются в скрытые пробелы анализа
+- **AND** baseline snapshots, SARIF и Trivy integration reports получают полный unfiltered scan
 
 ### Requirement: Baselines
 

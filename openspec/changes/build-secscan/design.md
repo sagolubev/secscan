@@ -695,3 +695,55 @@ and schema-valid SARIF, including baseline-filtered HTML with full SARIF, hostil
 text, failed coverage, parent replacement and no-clobber behavior. Rollback is
 omitting the additive flags or reverting the outcome commits. Standard feature
 artifacts and Comprehensive security/verification gates apply.
+
+## Strict project filters
+
+Read optional .secscan.toml from the Git root before scanning. --config FILE
+selects an explicit file; --no-config ignores project policy. These flags are
+mutually exclusive and unavailable for update. --min-severity overrides the
+configured floor. Missing default config is allowed; an explicit missing file,
+symlink, non-regular file, oversized file or invalid TOML fails before scan.
+Only an existing selected control file is excluded from discovery. Use the
+installed go-toml/v2 strict decoder and bounded 1 MiB reads, with static errors
+that never echo configuration contents. No plugins, includes or code execution.
+
+Config schema version=1 has optional min_severity, test_paths and suppressions.
+Each suppression requires a unique ASCII id, a nonempty reason and at least one
+selector: kind, rule, fingerprint, path or advisory. Selectors are intersected;
+rule/advisory/fingerprint are exact. Paths are repository-relative exact names,
+Go path.Match globs (no recursive **), or a trailing-slash directory prefix.
+Reject absolute/traversing/malformed patterns, unknown keys, invalid kinds or
+severity, duplicate ids and more than 256 rules. A reason is required for review
+but is not copied into scan output. Test-data paths use the same path grammar.
+Unknown finding severity remains visible at any configured floor.
+
+Maintain full normalized findings independently of the visible view. Process
+native scanner waivers at the existing scanner boundary; then project rules in
+file order, baseline, severity floor, and explicit test-data paths. Native inline
+waivers have no retrospective counts because adapters do not receive those
+findings. Never hide secret/error findings through any project filter. Snapshot,
+SARIF and Trivy exports always consume the full model.
+
+Partial dependency suppression subtracts selected advisory/location combinations:
+retain all advisories at unselected places and remaining advisories at selected
+places. Keep fragments separate and preserve the original fingerprint. Add a
+baseline entrypoint for already-normalized fragments that validates and clones
+them without re-merging or recomputing identity. Baseline-only behavior remains
+unchanged. With project splitting, baseline counters describe the fragments
+entering that stage; the filtering summary records original finding counts and
+final output fragments separately. JSON/HTML must not normalize these fragments
+back together, and SARIF rejects a filtered model passed by mistake.
+
+Record each stage's removed findings, places, advisories and occurrences. Counts
+are differences of sets keyed by original fingerprint; an occurrence is one
+finding/place/advisory combination (one place for code findings). A place or
+advisory counts as removed only when no surviving fragment contains it. Thus
+overlapping rules cannot count an element twice; partial pair removal remains
+visible even when neither whole place nor advisory disappears. Retain coverage
+and inventory independently of filtering.
+
+The outcome owns internal/filter, additive report accounting, the baseline
+fragment entrypoint and CLI config/pipeline. Verify strict/hostile configs,
+overlapping and partial rules, exemptions, baseline ordering, unchanged full
+exports and input immutability through focused tests plus a real CLI fixture.
+Rollback: --no-config/remove optional flags or revert the outcome commits.

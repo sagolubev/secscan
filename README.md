@@ -326,6 +326,65 @@ baseline из доверенного предыдущего запуска. Из
 Для новой версии baseline выберите новое имя файла. Это пользовательское сравнение
 сканов, отдельное от фазового baseline в GRACE-проверках разработки.
 
+## Исключения и порог severity
+
+Secscan читает `.secscan.toml` из корня Git-репозитория перед сканированием.
+Файл необязателен. Например:
+
+```toml
+version = 1
+min_severity = "medium"
+test_paths = ["testdata/"]
+
+[[suppressions]]
+id = "fixture-eval"
+reason = "Тестовый пример намеренно вызывает eval"
+rule = "secscan.python.dynamic-code-execution"
+path = "tests/"
+```
+
+У suppression обязательны уникальный `id`, непустой `reason` и хотя бы один
+селектор: `kind`, `rule`, `fingerprint`, `path` или `advisory`. Все заданные
+селекторы должны совпасть. Rule, fingerprint и advisory сравниваются точно.
+`path` принимает относительный путь, маску `*`, `?`, `[...]` или буквальный
+префикс каталога с завершающим `/`. `**`, абсолютные пути и `..` запрещены.
+
+Выбор другого файла, отключение project policy и переопределение порога:
+
+```sh
+secscan --config /path/to/policy.toml /path/to/repository
+secscan --no-config /path/to/repository
+secscan --min-severity high /path/to/repository
+```
+
+`--config` и `--no-config` взаимоисключаются. Эти флаги и `--min-severity`
+недоступны для `update`. CLI-порог заменяет `min_severity` из файла.
+Уровни: `informational`, `low`, `medium`, `high`, `critical`.
+Неизвестная severity остаётся видимой при любом пороге. Находки `secret` и
+`error` сохраняются при всех project-фильтрах, включая baseline и test-data.
+
+Порядок обработки: inline waivers самого scanner → project rules по порядку
+в файле → baseline → severity floor → `test_paths`. Исключения внешнего движка
+не имеют сводных counts: scanner не передаёт скрытые им находки. Для CI можно
+передать проверенную внешнюю policy через `--config` или отключить project policy.
+
+`filtering` в JSON и HTML показывает исходное число findings, итоговое число
+фрагментов и удалённые элементы каждого этапа. `occurrences` считает сочетания
+advisory/location; для кода — locations. Place или advisory считается удалённым,
+только когда его нет ни в одном оставшемся фрагменте. Пересекающиеся правила
+не считают одно удаление дважды. При частичном исключении fingerprint сохраняется.
+После такого разделения baseline counts относятся к фрагментам на входе его этапа.
+
+JSON и HTML содержат видимый результат. SARIF, Trivy-экспорты и новый baseline
+сохраняют полный scan. Coverage и inventory фильтры не изменяют. Поле `reason`
+остаётся в конфигурации и не переносится в отчёт; выбранный config исключается
+из scanner inputs.
+
+Config должен быть обычным UTF-8 файлом размером до 1 MiB, с `version = 1`
+и не более 256 правил. ID — до 64 ASCII букв, цифр и символов `._-`, reason —
+до 1024 байт. Symlink, неизвестный ключ, неверный тип, повторный ID или
+некорректный селектор дают ошибку до scan. Регистр имён ключей значим.
+
 ## Что пока ограничено
 
 Python, TypeScript и Semgrep используют один собственный набор из восьми правил.
@@ -338,8 +397,7 @@ Gradle-проверки читают статические координаты
 но не проверяет доступность новых версий. GitLab includes не загружаются.
 Gitleaks проверяет рабочее дерево, а не историю Git.
 
-Пока нет пользовательских исключений,
-сканирования выбранных файлов и LLM-анализа. Podman и rootless остаются
+Пока нет сканирования выбранных файлов и LLM-анализа. Podman и rootless остаются
 непроверенными режимами. [Историческое сравнение с DietSec](docs/feature-status.md)
 описывает commit `c406ed3` от 6 сентября 2026 года. Текущие возможности описаны
 выше, актуальный остаток требований и задачи находятся в OpenSpec и Beads.

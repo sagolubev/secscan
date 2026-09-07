@@ -3,16 +3,21 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.18",
-  "baselineCommit": "88e8acb5186395aa0989e3e28dfbc1c15a3f7fc9",
+  "targetOutcome": "secscan-ij8.19",
+  "baselineCommit": "0cc6c8d27bbb509a62e2a12ef3745e5e43437f25",
   "scope": {
     "implementation": [
-      "internal/report/",
+      "internal/filter/",
+      "internal/report/report.go",
+      "internal/report/filter.go",
+      "internal/report/render.go",
+      "internal/report/render_test.go",
+      "internal/baseline/baseline.go",
+      "internal/baseline/baseline_test.go",
       "cmd/secscan/main.go",
-      "cmd/secscan/baseline.go",
-      "cmd/secscan/output.go",
-      "cmd/secscan/render.go",
-      "cmd/secscan/render_test.go"
+      "cmd/secscan/main_test.go",
+      "cmd/secscan/config.go",
+      "cmd/secscan/config_test.go"
     ],
     "governance": [
       "README.md",
@@ -201,25 +206,42 @@
       "scenario": "Exempt findings",
       "disposition": "target",
       "components": [
-        "internal/baseline/baseline.go",
-        "cmd/secscan/baseline.go"
+        "internal/filter/config.go",
+        "internal/filter/filter.go",
+        "cmd/secscan/config.go"
       ],
       "tests": [
-        "internal/baseline/baseline_test.go",
-        "cmd/secscan/baseline_test.go"
+        "internal/filter/filter_test.go",
+        "cmd/secscan/config_test.go"
       ]
     },
     {
       "requirement": "Filtering and suppressions",
       "scenario": "Strict project configuration",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.19"
+      "disposition": "target",
+      "components": [
+        "internal/filter/config.go",
+        "internal/filter/filter.go",
+        "cmd/secscan/config.go"
+      ],
+      "tests": [
+        "internal/filter/filter_test.go",
+        "cmd/secscan/config_test.go"
+      ]
     },
     {
       "requirement": "Filtering and suppressions",
       "scenario": "Suppression accounting",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.19"
+      "disposition": "target",
+      "components": [
+        "internal/filter/config.go",
+        "internal/filter/filter.go",
+        "cmd/secscan/config.go"
+      ],
+      "tests": [
+        "internal/filter/filter_test.go",
+        "cmd/secscan/config_test.go"
+      ]
     },
     {
       "requirement": "Baselines",
@@ -1063,6 +1085,20 @@
         "cmd/secscan/render_test.go",
         "cmd/secscan/baseline_test.go"
       ]
+    },
+    {
+      "requirement": "Filtering and suppressions",
+      "scenario": "Ordered visible filtering",
+      "disposition": "target",
+      "components": [
+        "internal/filter/filter.go",
+        "internal/baseline/baseline.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/filter/filter_test.go",
+        "cmd/secscan/config_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1095,10 +1131,12 @@
     ],
     "target": [
       {
-        "name": "render-focused",
+        "name": "filter-focused",
         "argv": [
           "go",
           "test",
+          "./internal/filter",
+          "./internal/baseline",
           "./internal/report",
           "./cmd/secscan",
           "-count=1"

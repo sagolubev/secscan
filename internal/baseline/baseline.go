@@ -15,6 +15,7 @@
 // Encode - Normalize full current findings into versioned JSON.
 // Decode - Validate untrusted snapshot JSON without echoing its data.
 // Compare - Return only current new, expanded and exempt findings.
+// CompareFragments - Compare canonical partial findings without remerging them.
 // END_MODULE_MAP
 
 // Package baseline compares canonical findings with portable prior snapshots.
@@ -136,6 +137,34 @@ func Compare(input []report.Finding, previous Snapshot) ([]report.Finding, repor
 	if err != nil {
 		return nil, report.BaselineSummary{}, err
 	}
+	return compare(current, previous)
+}
+
+// CompareFragments compares validated canonical fragments without merging
+// rectangles or recomputing their original fingerprint. Counts describe the
+// input fragments; returned nested data never aliases input or previous.
+func CompareFragments(input []report.Finding, previous Snapshot) ([]report.Finding, report.BaselineSummary, error) {
+	if !previous.valid {
+		return nil, report.BaselineSummary{}, errors.New("invalid baseline snapshot")
+	}
+	current := slices.Clone(input)
+	for i, f := range current {
+		if err := validate(f); err != nil {
+			return nil, report.BaselineSummary{}, err
+		}
+		f.Sources = slices.Clone(f.Sources)
+		f.Advisories = slices.Clone(f.Advisories)
+		f.Locations = slices.Clone(f.Locations)
+		if f.Package != nil {
+			pkg := *f.Package
+			f.Package = &pkg
+		}
+		current[i] = f
+	}
+	return compare(current, previous)
+}
+
+func compare(current []report.Finding, previous Snapshot) ([]report.Finding, report.BaselineSummary, error) {
 	codes := make(map[identity]*history)
 	dependencies := make(map[identity]map[string]*history)
 	for _, f := range previous.findings {

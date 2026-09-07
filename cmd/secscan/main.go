@@ -1,7 +1,7 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Compose CLI validation, isolated scanners and canonical output.
 // SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
-// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go
 // LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
@@ -9,7 +9,7 @@
 // START_MODULE_MAP
 // main - Own process cancellation and exit status.
 // scanOptions - Explicit scanner selection and excluded control paths.
-// run - Validate arguments, apply baselines and serialize one result.
+// run - Validate policy and outputs, filter visible findings and preserve full exports.
 // scan - Compose prepared scanner jobs and inventory evidence.
 // buildReport - Preserve successful and partial results.
 // parseScannerSelection - Validate the finite scanner set.
@@ -37,6 +37,7 @@ import (
 	"github.com/sagolubev/secscan/internal/baseline"
 	"github.com/sagolubev/secscan/internal/container"
 	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/filter"
 	"github.com/sagolubev/secscan/internal/gitleaks"
 	"github.com/sagolubev/secscan/internal/opengrep"
 	"github.com/sagolubev/secscan/internal/orchestrator"
@@ -81,6 +82,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	baselineOutput := flags.String("write-baseline", "", "write unfiltered findings to a new baseline file")
 	htmlOutput := flags.String("html", "", "write the visible report to a new offline HTML file")
 	sarifOutput := flags.String("sarif", "", "write complete unfiltered findings to a new SARIF file")
+	configFile := flags.String("config", "", "read project filtering policy from this TOML file")
+	noConfig := flags.Bool("no-config", false, "ignore project filtering configuration")
+	minSeverity := flags.String("min-severity", "", "hide ranked findings below this severity; keep secrets, errors and unknown severity")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -133,6 +137,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 
 	wantReports, readBaselineFlag, writeBaselineFlag := false, false, false
 	htmlFlag, sarifFlag := false, false
+	configFlag, noConfigFlag, severityFlag := false, false, false
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "trivy-reports":
@@ -145,8 +150,30 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			htmlFlag = true
 		case "sarif":
 			sarifFlag = true
+		case "config":
+			configFlag = true
+		case "no-config":
+			noConfigFlag = true
+		case "min-severity":
+			severityFlag = true
 		}
 	})
+	if configFlag && noConfigFlag || configFlag && *configFile == "" || severityFlag && (*minSeverity == "" || !filter.ValidSeverity(*minSeverity)) || updating && (configFlag || noConfigFlag || severityFlag) {
+		fmt.Fprintln(stderr, "invalid filtering flags: choose --config or --no-config, a valid --min-severity, and use them only with scan")
+		return 2
+	}
+	project := projectConfiguration{value: filter.Config{Version: 1}}
+	if !updating {
+		project, err = prepareProjectConfig(path, *configFile, *noConfig)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if severityFlag {
+			project.value.MinSeverity = *minSeverity
+			project.active = true
+		}
+	}
 	var baselineOptions baselineRequest
 	if readBaselineFlag || writeBaselineFlag {
 		if updating || readBaselineFlag && writeBaselineFlag || readBaselineFlag && *baselineInput == "" || writeBaselineFlag && *baselineOutput == "" {
@@ -169,6 +196,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	var renderedOutputs []renderedOutput
 	controlPaths := append([]string(nil), baselineOptions.excluded...)
+	controlPaths = append(controlPaths, project.excluded...)
 	if htmlFlag || sarifFlag {
 		if updating || htmlFlag && *htmlOutput == "" || sarifFlag && *sarifOutput == "" {
 			fmt.Fprintln(stderr, "--html and --sarif require a new file and cannot be used with update")
@@ -271,7 +299,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	unfiltered := result
 	var baselineData []byte
 	var baselineErr error
-	if baselineOptions.previous != nil {
+	if project.active {
+		var filtered filter.Result
+		filtered, baselineErr = filter.Apply(unfiltered.Findings, project.value, baselineOptions.previous)
+		if baselineErr == nil {
+			result.Findings, result.Baseline = filtered.Findings, filtered.Baseline
+			result.Filtering = &filtered.Summary
+		}
+	} else if baselineOptions.previous != nil {
 		var summary report.BaselineSummary
 		result.Findings, summary, baselineErr = baseline.Compare(unfiltered.Findings, *baselineOptions.previous)
 		if baselineErr == nil {
@@ -280,7 +315,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			result = unfiltered
 		}
 	}
-	if baselineOptions.output != nil && scanErr == nil {
+	if baselineOptions.output != nil && scanErr == nil && baselineErr == nil {
 		baselineErr = baselineWritable(unfiltered)
 		if baselineErr == nil {
 			baselineData, baselineErr = baseline.Encode(unfiltered.Findings)
