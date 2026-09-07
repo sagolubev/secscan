@@ -1190,3 +1190,23 @@ unrelated journals. Preserve all namespace assertions, three native CI jobs,
 realCLI image preparation/scanning and existing global checks. Local syntax and
 lint precede publication; actual hosted target success is required before
 closing .31/.24 or releasing binaries. Rollback reverts only the setup change.
+
+
+## v0.5.0 binary release
+
+Outcome .32 publishes the five approved non-LLM features after full source CI
+34151284848 passed. Update README installation/version examples and remove
+source-only availability notices. Keep runtime/platform guidance together and
+retain budget, scanner and namespace limitations. No scanner behavior or release
+workflow changes belong to this outcome.
+
+Use the existing release workflow and immutable v0.5.0 tag. It must repeat CI,
+execute native builds for Linux/macOS amd64/arm64, and publish exactly four
+secscan executables plus SHA256SUMS. Verify all downloaded asset hashes, execute
+the released macOS arm64 and Linux arm64 binaries, and install the published
+version into an owned temporary directory with the existing installer. Preserve
+user installations. Record release/CI evidence in Beads only after the published
+target is verified. Delete only the temporary secscan-namespace-validation VM;
+retain the user's default runtime. LLM requirements remain deferred. Rollback
+for a user is installation of the prior explicit release version; do not rewrite
+published tags or replace release assets.

@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh | \
-  sh -s -- --version v0.4.0 --dir "$HOME/.local/bin"
+  sh -s -- --version v0.5.0 --dir "$HOME/.local/bin"
 ```
 
 Если `~/.local/bin` ещё не входит в PATH, добавьте его в текущем терминале:
@@ -43,7 +43,7 @@ secscan --version
 <details>
 <summary>Ручная установка без скрипта</summary>
 
-В [релизе v0.4.0](https://github.com/sagolubev/secscan/releases/tag/v0.4.0)
+В [релизе v0.5.0](https://github.com/sagolubev/secscan/releases/tag/v0.5.0)
 выберите файл для своей системы:
 
 | Система | Процессор | Файл |
@@ -60,7 +60,7 @@ secscan --version
 Для другой системы замените значение `asset` по таблице.
 
 ```sh
-version=v0.4.0
+version=v0.5.0
 asset=secscan-darwin-arm64
 release="https://github.com/sagolubev/secscan/releases/download/$version"
 curl -fL "$release/$asset" -o "$asset"
@@ -89,7 +89,7 @@ secscan --version
 ```
 
 Добавьте строку `export PATH=...` в `~/.zshrc` или `~/.bashrc`, чтобы команда
-была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.4.0`.
+была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.5.0`.
 
 `secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
 Оба информационных флага работают без Git-репозитория и Docker.
@@ -126,8 +126,8 @@ secscan /path/to/repository > /tmp/secscan-report.json
 
 ## Docker, Podman и rootless
 
-Поддержка namespace ниже относится к текущим исходникам и войдёт в следующий
-бинарный релиз. Secscan сначала ищет Docker, затем Podman. Чтобы явно выбрать
+Начиная с v0.5.0 проверены Docker rootless/userns-remap и Podman rootless.
+Secscan сначала ищет Docker, затем Podman. Чтобы явно выбрать
 backend, задайте переменную для обеих команд:
 
 ```sh
@@ -151,9 +151,18 @@ scan не считается успешным. Сеть по-прежнему р
 Проверены Docker 29.5.2 с rootless/systemd и userns-remap, а также
 Podman 4.9.3 rootless/cgroupfs на Linux arm64. CI отдельно проверяет все три
 режима на Linux amd64. Для namespace-переноса действует лимит 8 GiB и
-100000 entries на mount. Symlinks и специальные файлы не переносятся.
+100000 файлов и каталогов на каждый mount. Symlinks и специальные файлы
+не переносятся.
 Сканеры получают уже отобранные временные деревья, а базы — проверенные
 поколения кэша; превышение лимита даёт явную ошибку.
+
+Secscan проверяет ОС и архитектуру контейнерного сервера, включая удалённые
+Docker/Podman. Движкам нужен Linux amd64/arm64; Bearer — Linux amd64.
+Несовместимый scanner получает `skipped`, нулевой read и причину
+`unsupported_runtime_os` или `unsupported_runtime_arch`. Остальные проверки,
+включая нативный `refresh-versions`, продолжаются. Эмуляция не включается.
+`update` готовит совместимые движки. Если все выбранные контейнерные движки
+несовместимы, команда возвращает ошибку и сохраняет прежний манифест кэша.
 
 ## Выбор проверок
 
@@ -192,8 +201,7 @@ Secscan экспортирует их для Trivy и Grype, но не запу�
 
 ## Дополнительные правила
 
-Эти команды доступны в сборке из текущих исходников и войдут в следующий
-бинарный релиз. Пакет выбирается явно; secscan не загружает его из сети.
+Пакет выбирается явно; secscan не загружает его из сети.
 
 Создайте каталог с `rules.toml`, YAML-правилами и текстом их лицензии.
 Пример `rules.toml` для собственных правил:
@@ -255,7 +263,7 @@ remote includes и executable validators отклоняются. Кэш долж
 
 ## История Git
 
-В текущих исходниках доступен отдельный scanner `gitleaks-history`.
+Для истории есть отдельный scanner `gitleaks-history`.
 Он не входит в `all`. Подготовьте движок и явно выберите историю:
 
 ```sh
@@ -394,17 +402,17 @@ worktree исключаются из scan. Для обычного перена�
 
 ## Ограничение размера JSON
 
-В сборке из текущих исходников `--max-tokens` сокращает только JSON в stdout:
+`--max-tokens` сокращает только JSON в stdout:
 
 ```sh
 secscan --max-tokens 16000 --sarif /tmp/secscan-full.sarif \
   /path/to/repository > /tmp/secscan-small.json
 ```
 
-Счётчик `utf8-bytes-v1` считает один UTF-8 byte за одну единицу budget.
-Он включает весь JSON, собственные metadata и завершающий перевод строки.
+Счётчик `utf8-bytes-v1` считает один байт UTF-8 за одну единицу budget.
+Он включает весь JSON, собственные метаданные и завершающий перевод строки.
 Это консервативный лимит, а не точное число токенов конкретной модели;
-он может убрать больше находок, чем её tokenizer. Без флага сокращения нет.
+он может убрать больше находок, чем её токенизатор. Без флага сокращения нет.
 
 Secscan удаляет целые группы severity от informational к critical, пока JSON
 не поместится. Секреты, ошибки, неизвестная severity и сведения о покрытии
@@ -608,14 +616,6 @@ SECSCAN_ACCEPTANCE=1 SECSCAN_BEARER_ACCEPTANCE=1 \
 Bearer acceptance пропускается на arm64. CI выполняет проверки Go на Linux и
 macOS, контейнерные тесты на Linux amd64/arm64 и сборки для всех четырёх платформ.
 Тег `vMAJOR.MINOR.PATCH` публикует бинарники только после успешных проверок.
-
-Сборка из текущих исходников также проверяет OS и архитектуру самого container
-server, включая remote Docker/Podman. Движкам нужен Linux amd64/arm64; Bearer —
-Linux amd64. Несовместимый scanner получает `skipped`, нулевой read и причину
-`unsupported_runtime_os` или `unsupported_runtime_arch`. Остальные проверки,
-включая нативный `refresh-versions`, продолжаются. Эмуляция не включается.
-`update` готовит совместимые движки; если совместимых нет, сохраняет прежний
-cache manifest и возвращает ошибку.
 
 Требования и сценарии находятся в [OpenSpec](openspec/changes/build-secscan/specs/secscan/spec.md),
 задачи и результаты проверок — в Beads (`br`). Для работы с ними нужны
