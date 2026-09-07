@@ -673,6 +673,12 @@ GitHub Actions SHALL проверять source changes и публиковать
 - **THEN** проверяются exact scenario links, declared full diff scope, Beads authority и artifact staleness
 - **AND** validation-only output не выдаётся за выполненные phase checks/evidence
 
+#### Scenario: Namespace runner provisioning
+- **WHEN** CI проверяет Docker rootless и userns-remap
+- **THEN** rootless helpers соответствуют установленной версии daemon и берутся из официального Docker APT source с проверенным ключом
+- **AND** data-root remapped daemon находится в отдельном доступном ему system directory; private runner paths не получают широких permissions
+- **AND** ошибки startup содержат bounded diagnostics своего service, а native ownership/cancellation/CLI tests остаются обязательными
+
 #### Scenario: Binary release
 - **WHEN** push корректного version tag запускает release workflow
 - **THEN** после gates создаётся GitHub Release с четырьмя single-file executables и SHA256 checksums

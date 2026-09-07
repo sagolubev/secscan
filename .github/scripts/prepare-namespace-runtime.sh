@@ -22,7 +22,7 @@ case "$mode" in
     if (( major >= 29 )); then features=(--feature containerd-snapshotter=false); fi
     sudo systemd-run --unit=secscan-userns --property=Delegate=yes \
       dockerd --config-file "$RUNNER_TEMP/secscan-daemon.json" \
-      --data-root "$RUNNER_TEMP/docker-userns" --exec-root /run/secscan-userns \
+      --data-root /var/lib/secscan-userns --exec-root /run/secscan-userns \
       --host "$DOCKER_HOST" --pidfile /run/secscan-userns.pid \
       --group "$(id -gn)" --userns-remap=default \
       --bridge=none --iptables=false --ip-forward=false --ip-masq=false "${features[@]}"
@@ -31,6 +31,12 @@ case "$mode" in
     # Match the daemon package; mixing rootless helpers and dockerd versions
     # changes startup behavior and does not test a supported installation.
     package_version=$(dpkg-query -W -f='${Version}' docker-ce)
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$RUNNER_TEMP/docker.asc"
+    printf '%s  %s\n' 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570 \
+      "$RUNNER_TEMP/docker.asc" | sha256sum --check --strict
+    sudo install -D -m 0644 "$RUNNER_TEMP/docker.asc" /etc/apt/keyrings/secscan-docker.asc
+    printf 'deb [arch=%s signed-by=/etc/apt/keyrings/secscan-docker.asc] https://download.docker.com/linux/ubuntu noble stable\n' \
+      "$(dpkg --print-architecture)" | sudo tee /etc/apt/sources.list.d/secscan-docker.list > /dev/null
     sudo apt-get update
     sudo apt-get install -y uidmap slirp4netns dbus-user-session \
       "docker-ce-rootless-extras=$package_version"
@@ -64,7 +70,11 @@ for attempt in {1..60}; do
   sleep 1
 done
 if [[ "$ready" != true ]]; then
-  "$SECSCAN_RUNTIME" info
+  "$SECSCAN_RUNTIME" info || true
+  case "$mode" in
+    docker-userns) sudo journalctl --unit=secscan-userns --no-pager --lines=40 ;;
+    docker-rootless) journalctl --user --unit=secscan-rootless --no-pager --lines=40 ;;
+  esac
   exit 1
 fi
 printf 'SECSCAN_RUNTIME=%s\nSECSCAN_EXPECTED_NAMESPACE=%s\n' "$SECSCAN_RUNTIME" "$mode" >> "$GITHUB_ENV"

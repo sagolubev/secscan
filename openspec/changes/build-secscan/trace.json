@@ -3,14 +3,12 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.30",
-  "baselineCommit": "97be1ecdde62c4a1f4be5a7768ab2fd466f17c64",
+  "targetOutcome": "secscan-ij8.31",
+  "baselineCommit": "d62c5ee9b4e03f58252b958f5c7b235342aa2774",
   "scope": {
     "implementation": [
-      "internal/opengrep/image.go",
-      "internal/opengrep/image_test.go",
-      "scanner/opengrep/assets/Dockerfile",
-      "scanner/opengrep/test-image.sh"
+      ".github/scripts/prepare-namespace-runtime.sh",
+      ".github/workflows/ci.yml"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -1507,6 +1505,20 @@
         "internal/opengrep/image_test.go",
         "cmd/secscan/render_test.go"
       ]
+    },
+    {
+      "requirement": "Continuous verification and releases",
+      "scenario": "Namespace runner provisioning",
+      "disposition": "target",
+      "components": [
+        ".github/scripts/prepare-namespace-runtime.sh",
+        ".github/workflows/ci.yml"
+      ],
+      "tests": [
+        "internal/container/namespace_acceptance_test.go",
+        "internal/container/cancellation_test.go",
+        "cmd/secscan/render_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1529,35 +1541,29 @@
         ]
       },
       {
-        "name": "existing-image-boundary",
+        "name": "existing-setup-syntax",
         "argv": [
-          "go",
-          "test",
-          "-json",
-          "./internal/opengrep",
-          "./cmd/secscan",
-          "-count=1"
+          "bash",
+          "-n",
+          ".github/scripts/prepare-namespace-runtime.sh"
         ]
       }
     ],
     "target": [
       {
-        "name": "portable-image-focused",
+        "name": "setup-syntax",
         "argv": [
-          "go",
-          "test",
-          "-json",
-          "./internal/opengrep",
-          "./cmd/secscan",
-          "-count=1"
+          "bash",
+          "-n",
+          ".github/scripts/prepare-namespace-runtime.sh"
         ]
       },
       {
-        "name": "image-smoke-syntax",
+        "name": "workflow-lint",
         "argv": [
-          "sh",
-          "-n",
-          "scanner/opengrep/test-image.sh"
+          "actionlint",
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml"
         ]
       }
     ],
@@ -1580,20 +1586,19 @@
         ]
       },
       {
-        "name": "format",
+        "name": "setup-syntax",
         "argv": [
-          "gofmt",
-          "-d",
-          "."
-        ],
-        "requireEmptyStdout": true
+          "bash",
+          "-n",
+          ".github/scripts/prepare-namespace-runtime.sh"
+        ]
       },
       {
-        "name": "vet",
+        "name": "workflow-lint",
         "argv": [
-          "go",
-          "vet",
-          "./..."
+          "actionlint",
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml"
         ]
       },
       {
@@ -1603,44 +1608,6 @@
           "test",
           "-json",
           "./..."
-        ]
-      },
-      {
-        "name": "container-acceptance",
-        "argv": [
-          "go",
-          "test",
-          "-json",
-          "./...",
-          "-run",
-          "TestAcceptance",
-          "-count=1"
-        ],
-        "env": [
-          "SECSCAN_ACCEPTANCE=1"
-        ]
-      },
-      {
-        "name": "installer-syntax",
-        "argv": [
-          "sh",
-          "-n",
-          "install.sh"
-        ]
-      },
-      {
-        "name": "installer-tests",
-        "argv": [
-          "python3",
-          ".github/scripts/test-installer.py"
-        ]
-      },
-      {
-        "name": "workflow-lint",
-        "argv": [
-          "actionlint",
-          ".github/workflows/ci.yml",
-          ".github/workflows/release.yml"
         ]
       }
     ]

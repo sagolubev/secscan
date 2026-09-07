@@ -1168,3 +1168,25 @@ userns-remap. Focused image tests and full container gates preserve Docker and
 rule-pack behavior. .24 remains open and depends on this correction; its earlier
 final record covers its frozen declared checks, not the previously failing
 Podman build acceptance. Rollback reverts only this portable context change.
+
+
+## Hosted namespace runner provisioning
+
+Outcome .31 corrects CI setup discovered by run34150558457. It changes only the
+owned ephemeral runner setup, with Standard artifacts and Comprehensive target
+verification. GitHub's Ubuntu runner has Docker28.0.4 installed but no Docker
+APT source; its distro repositories cannot provide matching rootless-extras.
+The official Docker noble package index confirms that exact version exists.
+Install the official Docker public key after checking its SHA256, configure a
+separate signed-by Docker source, and install helpers at the daemon's exact
+package version. Do not replace the runner daemon with a different version.
+
+Docker userns refuses a graphroot below private RUNNER_TEMP: an isolated VM
+reproduced the remapped-root traversal failure. Use /var/lib/secscan-userns for
+this separate daemon, preserving private runner directory permissions. Keep
+its socket/exec root/PID separate from the default Docker service. Surface the
+last40 lines of the owned system or user unit on startup failure; do not print
+unrelated journals. Preserve all namespace assertions, three native CI jobs,
+realCLI image preparation/scanning and existing global checks. Local syntax and
+lint precede publication; actual hosted target success is required before
+closing .31/.24 or releasing binaries. Rollback reverts only the setup change.
