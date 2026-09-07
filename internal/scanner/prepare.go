@@ -1,8 +1,8 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Prepare and resolve immutable scanner assets without implicit scan downloads.
-// SCOPE: Publish successful generations only; history and working-tree Gitleaks share one asset.
-// DEPENDS: internal/scanner/cache.go, internal/gitleaks/run.go, internal/opengrep/image.go
-// LINKS: cmd/secscan/history_test.go#TestAcceptanceHistoryCLI, openspec/changes/build-secscan/specs/secscan/spec.md#requirement-scanner-preparation
+// SCOPE: Prepare compatible engines only; wholly unsupported selections preserve the prior generation.
+// DEPENDS: internal/scanner/cache.go, internal/scanner/platform.go, internal/gitleaks/run.go, internal/opengrep/image.go
+// LINKS: cmd/secscan/history_test.go#TestAcceptanceHistoryCLI, internal/scanner/platform_test.go#TestPlatformPreparationPreservesPriorCache, openspec/changes/build-secscan/specs/secscan/spec.md#requirement-scanner-preparation
 // ROLE: RUNTIME
 // MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -32,38 +32,36 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 	if err != nil {
 		return err
 	}
-	preparedSelection := append([]string(nil), selection...)
-	if slices.Contains(selection, "oci-images") {
-		preparedSelection = append(preparedSelection, "trivy", "grype")
+	var preparedSelection []string
+	for _, name := range selection {
+		for _, key := range EngineNames(name) {
+			if !slices.Contains(preparedSelection, key) {
+				preparedSelection = append(preparedSelection, key)
+			}
+		}
+	}
+	if len(preparedSelection) == 0 {
+		return nil
+	}
+	platform, err := RuntimePlatform(ctx, runtime)
+	if err != nil {
+		return err
+	}
+	var supported []string
+	var reasons []string
+	for _, key := range preparedSelection {
+		if reason := platform.UnsupportedReason(key); reason != "" {
+			reasons = append(reasons, key+": "+reason)
+			continue
+		}
+		supported = append(supported, key)
+	}
+	if len(supported) == 0 {
+		return fmt.Errorf("no selected engines support this runtime; use a supported native Linux server: %s", strings.Join(reasons, "; "))
 	}
 	return cache.Update(ctx, func(ctx context.Context, staging string) (map[string]Asset, error) {
 		result := map[string]Asset{}
-		for _, name := range preparedSelection {
-			if name == "refresh-versions" || name == "oci-images" {
-				continue
-			}
-			key := name
-			if key == "gitleaks-history" {
-				key = "gitleaks"
-			}
-			if name == "gradle-catalog" || name == "gradle-scripts" {
-				key = "osv-scanner"
-			}
-			if name == "python-sast" || name == "typescript-sast" {
-				key = "opengrep"
-			}
-			if _, ok := result[key]; ok {
-				continue
-			}
-			if key == "bearer" {
-				arch, err := RuntimeArchitecture(ctx, runtime)
-				if err != nil {
-					return nil, err
-				}
-				if arch != "amd64" {
-					continue
-				}
-			}
+		for _, key := range supported {
 			var id, ref string
 			var err error
 			var static map[string]StaticFile
@@ -85,10 +83,10 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 				ref = opengrep.ImageTag
 				id, err = opengrep.EnsureImage(ctx, runtime)
 			default:
-				return nil, fmt.Errorf("preparation unavailable for %s", name)
+				return nil, fmt.Errorf("preparation unavailable for %s", key)
 			}
 			if err != nil {
-				return nil, fmt.Errorf("prepare %s: %w", name, err)
+				return nil, fmt.Errorf("prepare %s: %w", key, err)
 			}
 			asset := Asset{ImageID: id, ImageRef: ref, Static: static}
 			if key == "bearer" {

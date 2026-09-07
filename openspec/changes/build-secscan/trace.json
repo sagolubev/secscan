@@ -3,16 +3,13 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.22",
-  "baselineCommit": "d83a5239fed964a50f18c8b398979bbc04db4d83",
+  "targetOutcome": "secscan-ij8.25",
+  "baselineCommit": "9a4f2b40fdf8e1542551d7940faade783c5dc7cc",
   "scope": {
     "implementation": [
-      "internal/gitleaks/",
+      "internal/scanner/",
       "cmd/secscan/",
-      "internal/scanner/prepare.go",
-      "internal/scanner/cache_test.go",
-      "internal/report/",
-      "internal/baseline/"
+      "internal/container/"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -460,8 +457,16 @@
     {
       "requirement": "Supported environments",
       "scenario": "Unsupported host",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.25"
+      "disposition": "target",
+      "components": [
+        "internal/scanner/platform.go",
+        "internal/scanner/prepare.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/platform_test.go",
+        "cmd/secscan/platform_test.go"
+      ]
     },
     {
       "requirement": "Development traceability",
@@ -1380,6 +1385,48 @@
         "internal/gitleaks/history_test.go",
         "cmd/secscan/history_test.go"
       ]
+    },
+    {
+      "requirement": "Supported environments",
+      "scenario": "Runtime platform source",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/platform.go",
+        "internal/scanner/prepare.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/platform_test.go",
+        "cmd/secscan/platform_test.go"
+      ]
+    },
+    {
+      "requirement": "Supported environments",
+      "scenario": "Platform preparation",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/platform.go",
+        "internal/scanner/prepare.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/platform_test.go",
+        "cmd/secscan/platform_test.go"
+      ]
+    },
+    {
+      "requirement": "Supported environments",
+      "scenario": "Platform coverage disclosure",
+      "disposition": "target",
+      "components": [
+        "internal/scanner/platform.go",
+        "internal/scanner/prepare.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/scanner/platform_test.go",
+        "cmd/secscan/platform_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1402,31 +1449,28 @@
         ]
       },
       {
-        "name": "existing-history-boundaries",
+        "name": "existing-platform-boundaries",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/gitleaks",
+          "./internal/scanner",
+          "./internal/container",
           "./cmd/secscan",
-          "./internal/baseline",
-          "./internal/report",
           "-count=1"
         ]
       }
     ],
     "target": [
       {
-        "name": "history-focused",
+        "name": "platform-focused",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/gitleaks",
-          "./cmd/secscan",
           "./internal/scanner",
-          "./internal/baseline",
-          "./internal/report",
+          "./internal/container",
+          "./cmd/secscan",
           "-count=1"
         ]
       }

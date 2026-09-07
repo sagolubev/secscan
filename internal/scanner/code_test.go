@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify isolated code engines, platform guards and positive read evidence.
+// SCOPE: Fake runtime metadata models actual server OS and architecture; native checks are opt-in.
+// DEPENDS: internal/scanner/code.go, internal/scanner/platform.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-supported-environments
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestCodeArgsOffline - Keep all code engines offline without emulation overrides.
+// TestBearerSkipsServerArm64 - Guard direct Bearer entry before any preparation.
+// TestRuntimeArchitectureServerJSON - Use actual Docker and Podman server metadata.
+// TestAcceptanceCodeScanners - Exercise real supported code engines.
+// TestAcceptanceBearerNativeAMD64 - Prove Bearer execution only on native amd64.
+// TestBearerCoverageRequiresPositiveEvidence - Never infer analysis from empty findings.
+// END_MODULE_MAP
+
 package scanner
 
 import (
@@ -44,7 +61,7 @@ func TestBearerSkipsServerArm64(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "docker")
 	script := `#!/bin/sh
-if [ "$1" = version ]; then printf '{"Arch":"arm64"}'; exit 0; fi
+if [ "$1" = version ]; then printf '{"Os":"linux","Arch":"arm64"}'; exit 0; fi
 exit 99
 `
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
@@ -120,7 +137,7 @@ func TestStaticAssetsPublicationAndIntegrity(t *testing.T) {
 }
 
 func TestRuntimeArchitectureServerJSON(t *testing.T) {
-	for _, test := range []struct{ binary, data, want string }{{"docker", `{"Arch":"x86_64"}`, "amd64"}, {"podman", `{"host":{"arch":"aarch64"}}`, "arm64"}, {"docker", `{"Client":{"Arch":"amd64"}}`, ""}} {
+	for _, test := range []struct{ binary, data, want string }{{"docker", `{"Os":"linux","Arch":"x86_64"}`, "amd64"}, {"podman", `{"host":{"os":"linux","arch":"aarch64"}}`, "arm64"}, {"docker", `{"Client":{"Arch":"amd64"}}`, ""}} {
 		binary := filepath.Join(t.TempDir(), test.binary)
 		if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+test.data+"'\n"), 0700); err != nil {
 			t.Fatal(err)

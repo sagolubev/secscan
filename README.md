@@ -550,6 +550,14 @@ Bearer acceptance пропускается на arm64. CI выполняет п�
 macOS, контейнерные тесты на Linux amd64/arm64 и сборки для всех четырёх платформ.
 Тег `vMAJOR.MINOR.PATCH` публикует бинарники только после успешных проверок.
 
+Сборка из текущих исходников также проверяет OS и архитектуру самого container
+server, включая remote Docker/Podman. Движкам нужен Linux amd64/arm64; Bearer —
+Linux amd64. Несовместимый scanner получает `skipped`, нулевой read и причину
+`unsupported_runtime_os` или `unsupported_runtime_arch`. Остальные проверки,
+включая нативный `refresh-versions`, продолжаются. Эмуляция не включается.
+`update` готовит совместимые движки; если совместимых нет, сохраняет прежний
+cache manifest и возвращает ошибку.
+
 Требования и сценарии находятся в [OpenSpec](openspec/changes/build-secscan/specs/secscan/spec.md),
 задачи и результаты проверок — в Beads (`br`). Для работы с ними нужны
 [OpenSpec 1.12.0](https://github.com/Fission-AI/OpenSpec) и

@@ -987,3 +987,44 @@ Independent security review and all existing GRACE/source/container gates remain
 Least confident: Gitleaks reports patch statistics differently from rev-list
 ancestry; metadata must keep those concepts separate. Git history extraction
 must fail closed on missing objects rather than start an implicit fetch.
+
+
+## Consistent runtime platform disclosure
+
+Feature profile, Standard artifacts, Comprehensive verification; outcome .25
+is one vertical capability gate over existing catalog, preparation and scan
+composition. Reuse RuntimeArchitecture/finite pins, not a registry lookup or
+plugin system. Existing native CI proves Linux amd64/arm64 for current engines;
+Bearer remains native amd64 only. All container engines require Linux. Pure
+refresh-versions is independent of container platform.
+
+Read server OS/architecture through Docker version --format {{json .Server}}
+or Podman info JSON, including remote daemons. Normalize x86_64/aarch64 aliases;
+validate bounded metadata and never echo arbitrary daemon fields. Keep one
+central capability decision for catalog engines and aliases (gitleaks-history,
+Python/TypeScript, Gradle wrappers and OCI). Do not enable emulation or pull an
+alternate tag. Retain legacy unsupported_runtime_arch marker for architecture
+limits, with explicit required and actual platform; distinguish unsupported OS.
+
+Before scheduling applicable container work, split unsupported personas into
+explicit skipped results. Preserve requested selection for coverage accounting,
+existing scope metadata and native sibling execution. Known input paths remain
+unread, read is zero, and history retains repository units without invented
+commit counts. Missing/malformed platform metadata is a failed prerequisite;
+container-free work still runs when possible, otherwise preserve the existing
+preflight error without a fabricated report. Unsupported platform itself is a
+reported skip, not a successful scan.
+
+Preparation uses the same capability policy, skips unsupported engines without
+network calls and keeps supported ones. If all actual selected engines are
+unsupported, return an actionable error and preserve the prior manifest. Ordinary
+mixed all preparation on arm64 continues preparing compatible engines while
+omitting Bearer. Direct code-adapter entry points retain their platform guards.
+
+Verify actual server parsing for Docker/Podman, malformed data, supported native
+platforms, unsupported architectures/OS, no pulls/builds/emulation, history and
+language aliases, mixed successful native/container results and scope/coverage.
+Use realistic fake runtime responses for unavailable architectures and the
+existing native Linux amd64/arm64 CI for supported execution. The contract does
+not claim native execution on an unsupported CPU. Rollback reverts the additive
+gate; existing successful supported scans and stored assets stay valid.

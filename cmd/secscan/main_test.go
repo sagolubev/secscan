@@ -263,7 +263,7 @@ func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home)
 	bin := t.TempDir()
 	log := filepath.Join(bin, "calls")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nexit 0\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nif [ \"$1\" = version ]; then printf '{\"Os\":\"linux\",\"Arch\":\"amd64\"}'; fi\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(string(data)) != "info" {
+	if string(data) != "info\nversion --format {{json .Server}}\n" {
 		t.Fatalf("missing-cache scan ran commands beyond local runtime probe: %s", data)
 	}
 }
@@ -338,7 +338,7 @@ func TestIaCMissingPreparation(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home)
 	bin := t.TempDir()
 	log := filepath.Join(bin, "calls")
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nexit 0\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$SECSCAN_TEST_CALLS\"\nif [ \"$1\" = version ]; then printf '{\"Os\":\"linux\",\"Arch\":\"amd64\"}'; fi\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("SECSCAN_TEST_CALLS", log)
@@ -353,7 +353,7 @@ func TestIaCMissingPreparation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != "info\ninfo\ninfo\n" {
+	if string(data) != strings.Repeat("info\nversion --format {{json .Server}}\n", 3) {
 		t.Fatalf("unexpected runtime commands: %s", data)
 	}
 }
@@ -372,7 +372,7 @@ func TestCLIRejectsIaCWithoutEvaluatedInputs(t *testing.T) {
 	bin := t.TempDir()
 	t.Setenv("SECSCAN_TEST_IMAGE_ID", "sha256:"+strings.Repeat("a", 64))
 	script := `#!/bin/sh
-case "$1" in info|pull) exit 0;; image) printf '%s\n' "$SECSCAN_TEST_IMAGE_ID"; exit 0;; esac
+case "$1" in version) printf '{"Os":"linux","Arch":"amd64"}'; exit 0;; info|pull) exit 0;; image) printf '%s\n' "$SECSCAN_TEST_IMAGE_ID"; exit 0;; esac
 for arg in "$@"; do
  case "$arg" in type=bind,src=*,dst=/out) output="${arg#type=bind,src=}"; output="${output%,dst=/out}"; printf '%s\n' "$SECSCAN_TEST_RESULT" > "$output/result.json";; esac
 done
@@ -467,7 +467,7 @@ func TestCLIBearerSkippedOnServerArm64(t *testing.T) {
 	}
 	bin := t.TempDir()
 	script := `#!/bin/sh
-case "$1" in info) exit 0;; version) printf '{"Arch":"arm64"}'; exit 0;; esac
+case "$1" in info) exit 0;; version) printf '{"Os":"linux","Arch":"arm64"}'; exit 0;; esac
 exit 99
 `
 	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0700); err != nil {
@@ -509,7 +509,7 @@ func TestAcceptanceBearerCoverageContractWithFakeRuntime(t *testing.T) {
 	script := `#!/bin/sh
 case "$1" in
  info|pull) exit 0;;
- version) printf '{"Arch":"amd64"}'; exit 0;;
+ version) printf '{"Os":"linux","Arch":"amd64"}'; exit 0;;
  image) printf '%s\n' "$SECSCAN_TEST_IMAGE_ID"; exit 0;;
 esac
 case "$*" in

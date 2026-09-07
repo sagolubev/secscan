@@ -1,13 +1,12 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Run prepared code scanners and preserve positive analysis evidence.
-// SCOPE: Stage only selected inputs; never run repository build files or fetch rules.
-// DEPENDS: internal/opengrep/parser.go, internal/opengrep/rules.go, internal/rules/pack.go
-// LINKS: cmd/secscan/rules_test.go#TestAcceptanceRulePacks
+// SCOPE: Gate the actual server platform before staging selected inputs; never build repository code or fetch rules.
+// DEPENDS: internal/opengrep/parser.go, internal/opengrep/rules.go, internal/rules/pack.go, internal/scanner/platform.go
+// LINKS: cmd/secscan/rules_test.go#TestAcceptanceRulePacks, internal/scanner/platform_test.go#TestPlatformDirectCodeGuard
 // ROLE: RUNTIME
 // MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
-// RuntimeArchitecture - Read the server architecture without assuming the host matches.
 // CodeArgs - Build isolated engine arguments with local rules.
 // ScanCode - Run a prepared built-in scanner.
 // ScanCodeWithRules - Add a verified pack to Semgrep and validate its full input evidence.
@@ -35,42 +34,6 @@ import (
 	"github.com/sagolubev/secscan/internal/rules"
 	ruleassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
 )
-
-// RuntimeArchitecture reads the container server architecture, including remote servers.
-func RuntimeArchitecture(ctx context.Context, runtime container.Runtime) (string, error) {
-	args := []string{"version", "--format", "{{json .Server}}"}
-	podman := strings.Contains(filepath.Base(runtime.Binary), "podman")
-	if podman {
-		args = []string{"info", "--format", "json"}
-	}
-	data, err := runtime.Output(ctx, args...)
-	if err != nil {
-		return "", err
-	}
-	var server struct {
-		Arch string `json:"Arch"`
-		Host struct {
-			Arch string `json:"arch"`
-		} `json:"host"`
-	}
-	if json.Unmarshal(data, &server) != nil {
-		return "", fmt.Errorf("invalid container server architecture")
-	}
-	arch := server.Arch
-	if podman {
-		arch = server.Host.Arch
-	}
-	switch arch {
-	case "x86_64":
-		arch = "amd64"
-	case "aarch64":
-		arch = "arm64"
-	}
-	if arch == "" {
-		return "", fmt.Errorf("missing container server architecture")
-	}
-	return arch, nil
-}
 
 // CodeArgs uses local rules and disables upstream updating and target configuration.
 func CodeArgs(name, imageID, target, output, rules string, files ...string) []string {
@@ -104,16 +67,22 @@ func ScanCode(ctx context.Context, runtime container.Runtime, cache Cache, name,
 }
 
 // ScanCodeWithRules adds a verified custom pack only to the Semgrep persona.
-func ScanCodeWithRules(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, files []string, emit func(progress.Event), pack *rules.Pack) (report.Scanner, []report.Finding, error) {
-	if name == "bearer" {
-		arch, err := RuntimeArchitecture(ctx, runtime)
+// A supplied platform must come from RuntimePlatform for this same runtime;
+// omitted metadata is queried before resolving assets or staging repository files.
+func ScanCodeWithRules(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, files []string, emit func(progress.Event), pack *rules.Pack, knownPlatform ...Platform) (report.Scanner, []report.Finding, error) {
+	var platform Platform
+	if len(knownPlatform) == 1 {
+		platform = knownPlatform[0]
+	} else {
+		var err error
+		platform, err = RuntimePlatform(ctx, runtime)
 		if err != nil {
 			return report.Scanner{}, nil, err
 		}
-		if arch != "amd64" {
-			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
-			return report.Scanner{Name: name, Status: "skipped", EngineVersion: Catalog()[name].Version, Coverage: report.Coverage{Unit: "files", Unread: len(files), UnreadInputs: append([]string(nil), files...)}, Limitations: []string{"unsupported_runtime_arch: " + arch + "; Bearer requires native amd64; emulation disabled"}}, nil, nil
-		}
+	}
+	if reason := platform.UnsupportedReason(name); reason != "" {
+		emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+		return report.Scanner{Name: name, Status: "skipped", EngineVersion: Catalog()[name].Version, Coverage: report.Coverage{Unit: "files", Unread: len(files), UnreadInputs: append([]string(nil), files...)}, Limitations: []string{reason}}, nil, nil
 	}
 	emit(progress.Event{Scanner: name, Stage: progress.StagePreparing, Status: progress.StatusRunning, Files: len(files)})
 	asset, err := cache.Resolve(ctx, runtime, name)

@@ -419,6 +419,21 @@
 - **THEN** affected scanner помечается failed или skipped с точной причиной
 - **AND** остальные scanners продолжают работу.
 
+#### Scenario: Runtime platform source
+- **WHEN** runtime подключён к local или remote daemon
+- **THEN** решение о совместимости использует OS и architecture сервера, а не host GOARCH
+- **AND** malformed или missing platform metadata не заменяется предположением о совместимости
+
+#### Scenario: Platform preparation
+- **WHEN** selected preparation включает совместимые и несовместимые engines
+- **THEN** подготавливаются совместимые engines без pulls/builds или скрытой emulation для остальных
+- **AND** выбор только несовместимых engines даёт понятную ошибку без замены прежнего cache manifest
+
+#### Scenario: Platform coverage disclosure
+- **WHEN** scanner пропущен из-за OS или architecture
+- **THEN** report содержит точную причину, нулевой read и известные непрочитанные inputs
+- **AND** scopes, successful siblings и container-free refresh-versions сохраняются
+
 ### Requirement: Development traceability
 
 Репозиторий SHALL поддерживать машинно-проверяемые связи между OpenSpec

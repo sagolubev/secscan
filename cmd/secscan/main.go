@@ -1,8 +1,8 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Compose CLI validation, isolated scanners and canonical output.
 // SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
-// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go, cmd/secscan/scope.go
-// LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, internal/scanner/platform.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go, cmd/secscan/scope.go
+// LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory, cmd/secscan/platform_test.go#TestPlatformSkipsPreserveScopesAndNativeSibling
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -10,7 +10,7 @@
 // main - Own process cancellation and exit status.
 // scanOptions - Explicit scanner/scoped-path selection and excluded control files.
 // run - Validate policy and outputs, filter visible findings and preserve full exports.
-// scan - Compose prepared scanner jobs and inventory evidence.
+// scan - Gate actual server platforms before preparing jobs; preserve requested coverage routes.
 // buildReport - Preserve successful and partial results.
 // parseScannerSelection - Validate the finite scanner set.
 // gitRoot - Resolve the containing Git worktree.
@@ -288,7 +288,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		runtime, err := container.DetectDefault(ctx)
+		var runtime container.Runtime
+		for _, name := range selection {
+			if len(scanner.EngineNames(name)) > 0 {
+				runtime, err = container.DetectDefault(ctx)
+				break
+			}
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -421,33 +427,73 @@ func scan(
 		return report.Report{}, err
 	}
 	dependencyFiles, dependencyUnread := scanner.DependencyInputs(inventory.Dependencies)
-	needsRuntime := slices.Contains(selection, "gitleaks-history") || slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
-		slices.Contains(selection, "gradle-catalog") && len(scanner.NativeInputs("gradle-catalog", inventory.Native)) > 0 ||
-		slices.Contains(selection, "gradle-scripts") && len(scanner.NativeInputs("gradle-scripts", inventory.Native)) > 0 ||
-		slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 ||
-		slices.Contains(selection, "python-sast") && len(scopedInventory.Python) > 0 ||
-		slices.Contains(selection, "typescript-sast") && len(scopedInventory.TypeScript) > 0 ||
-		slices.Contains(selection, "zizmor") && len(scopedInventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
-		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0 ||
-		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0 ||
-		slices.Contains(selection, "semgrep") && len(inputsWithRules("semgrep", scopedInventory, options.RulePack)) > 0 ||
-		slices.Contains(selection, "bearer") && len(inventory.Bearer) > 0 ||
-		slices.Contains(selection, "cppcheck") && len(inventory.Cppcheck) > 0
+	runtimeInputs := make(map[string][]string)
+	for _, name := range selection {
+		if len(scanner.EngineNames(name)) == 0 {
+			continue
+		}
+		source := inventory
+		if fileScopedScanner(name) {
+			source = scopedInventory
+		}
+		files := inputsWithRules(name, source, options.RulePack)
+		applicable := len(files) > 0
+		switch name {
+		case "gitleaks-history":
+			applicable = true
+		case "oci-images":
+			applicable = len(unchecked.Images) > 0
+		case "trivy", "grype", "osv-scanner":
+			applicable = len(dependencyFiles) > 0
+		}
+		if applicable {
+			runtimeInputs[name] = files
+		}
+	}
 	var runtime container.Runtime
+	var platform scanner.Platform
 	var runtimeErr error
-	if needsRuntime {
+	if len(runtimeInputs) > 0 {
 		runtime, runtimeErr = container.DetectDefault(ctx)
+		if runtimeErr == nil {
+			platform, runtimeErr = scanner.RuntimePlatform(ctx, runtime)
+		}
 		if runtimeErr != nil && !(slices.Contains(selection, "refresh-versions") && len(scanner.NativeInputs("refresh-versions", inventory.Native)) > 0) {
 			return report.Report{}, runtimeErr
 		}
 	}
+	var skipped []report.Scanner
+	var compatible []string
+	for _, name := range selection {
+		files, applicable := runtimeInputs[name]
+		reason := ""
+		if applicable && runtimeErr == nil {
+			reason = platform.UnsupportedReason(name)
+		}
+		if reason == "" {
+			compatible = append(compatible, name)
+			continue
+		}
+		coverage := report.Coverage{Unit: "files", Unread: len(files), UnreadInputs: append([]string(nil), files...)}
+		if name == "gitleaks-history" {
+			coverage = report.Coverage{Unit: "repository", Unread: 1}
+		}
+		outcome := report.Scanner{Name: name, Status: "skipped", EngineVersion: scanner.Catalog()[name].Version, Coverage: coverage, Limitations: []string{reason}}
+		if name == "oci-images" {
+			outcome.Images = unchecked.Images
+			outcome.Coverage = unchecked.Coverage
+			outcome.Coverage.UnreadInputs = append([]string(nil), files...)
+		}
+		skipped = append(skipped, outcome)
+		emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+	}
+	selection = compatible
 
 	cache, cacheErr := scanner.DefaultCache()
 	if runtimeErr != nil {
 		cacheErr = runtimeErr
 	}
 	var jobs []orchestrator.Job
-	var skipped []report.Scanner
 	preparationErrors := map[string]error{}
 	for _, name := range []string{"gradle-catalog", "gradle-scripts", "refresh-versions"} {
 		if !slices.Contains(selection, name) {
@@ -473,7 +519,7 @@ func scan(
 			}
 			return scanner.ScanOCI(ctx, runtime, cache, root, inventory.OCI, true, emit)
 		}})
-	} else if slices.Contains(selection, "oci-images") || len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0 {
+	} else if slices.Contains(selection, "oci-images") || !slices.Contains(options.Scanners, "oci-images") && (len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0) {
 		skipped = append(skipped, unchecked)
 		emit(progress.Event{Scanner: "oci-images", Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 	}
@@ -659,17 +705,6 @@ func scan(
 			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 			continue
 		}
-		if name == "bearer" && runtimeErr == nil {
-			arch, err := scanner.RuntimeArchitecture(ctx, runtime)
-			if err != nil {
-				return report.Report{}, err
-			}
-			if arch != "amd64" {
-				skipped = append(skipped, report.Scanner{Name: name, Status: "skipped", EngineVersion: scanner.Catalog()[name].Version, Coverage: report.Coverage{Unit: "files", Unread: len(files), UnreadInputs: files}, Limitations: []string{"unsupported_runtime_arch: " + arch + "; Bearer requires native amd64; emulation disabled"}})
-				emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
-				continue
-			}
-		}
 		if cacheErr != nil {
 			preparationErrors[name] = cacheErr
 		} else if name == "trivy" || name == "grype" || name == "osv-scanner" {
@@ -693,7 +728,7 @@ func scan(
 				return scanner.ScanIaC(ctx, runtime, cache, name, root, files, emit)
 			}
 			if name == "semgrep" || name == "bearer" || name == "cppcheck" {
-				return scanner.ScanCodeWithRules(ctx, runtime, cache, name, root, files, emit, options.RulePack)
+				return scanner.ScanCodeWithRules(ctx, runtime, cache, name, root, files, emit, options.RulePack, platform)
 			}
 			return scanner.ScanCI(ctx, runtime, cache, name, root, files, emit)
 		}})
@@ -749,9 +784,9 @@ func scan(
 			}
 			output.Scanners[i].Scope = &report.ScannerScope{Mode: mode, CandidateFiles: len(inputsWithRules(output.Scanners[i].Name, source, options.RulePack))}
 		}
-		gapInventory = scopedCoverageInventory(inventory, scopedInventory, selection)
+		gapInventory = scopedCoverageInventory(inventory, scopedInventory, options.Scanners)
 	}
-	output.UncheckedInputs = coverageGapsWithRules(gapInventory, selection, output.Scanners, options.RulePack)
+	output.UncheckedInputs = coverageGapsWithRules(gapInventory, options.Scanners, output.Scanners, options.RulePack)
 	return output, err
 }
 
