@@ -3,27 +3,20 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.20",
-  "baselineCommit": "96de56a8a3b876e12947fc7c68726e60da0089cc",
+  "targetOutcome": "secscan-ij8.27",
+  "baselineCommit": "2750257dfad5cd97adda62cf263b86fc25418f46",
   "scope": {
     "implementation": [
-      "internal/discovery/scopes.go",
-      "internal/discovery/scopes_test.go",
-      "internal/report/report.go",
-      "internal/report/scope.go",
-      "internal/report/render.go",
-      "internal/report/render_test.go",
-      "cmd/secscan/main.go",
-      "cmd/secscan/scope.go",
-      "cmd/secscan/scope_test.go"
+      "internal/tracecheck/",
+      "cmd/tracecheck/"
     ],
     "governance": [
-      "README.md",
-      "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/proposal.md",
       "openspec/changes/build-secscan/design.md",
       "openspec/changes/build-secscan/specs/secscan/spec.md",
-      "openspec/changes/build-secscan/.stale.json"
+      "openspec/changes/build-secscan/trace.json",
+      "openspec/changes/build-secscan/.stale.json",
+      "docs/grace-integration.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -1121,6 +1114,90 @@
         "internal/filter/filter_test.go",
         "cmd/secscan/config_test.go"
       ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Complete Git snapshot",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/git.go",
+        "internal/tracecheck/tracecheck.go",
+        "cmd/tracecheck/main.go"
+      ],
+      "tests": [
+        "internal/tracecheck/git_test.go",
+        "internal/tracecheck/manifest_test.go",
+        "cmd/tracecheck/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Manifest-bound verification",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/git.go",
+        "internal/tracecheck/tracecheck.go",
+        "cmd/tracecheck/main.go"
+      ],
+      "tests": [
+        "internal/tracecheck/git_test.go",
+        "internal/tracecheck/manifest_test.go",
+        "cmd/tracecheck/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Trace reference validation",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/git.go",
+        "internal/tracecheck/tracecheck.go",
+        "cmd/tracecheck/main.go"
+      ],
+      "tests": [
+        "internal/tracecheck/git_test.go",
+        "internal/tracecheck/manifest_test.go",
+        "cmd/tracecheck/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Preimplementation baseline",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/git.go",
+        "internal/tracecheck/tracecheck.go",
+        "cmd/tracecheck/main.go"
+      ],
+      "tests": [
+        "internal/tracecheck/git_test.go",
+        "internal/tracecheck/manifest_test.go",
+        "cmd/tracecheck/main_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Durable evidence chain",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.28"
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Legacy evidence retention",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.28"
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Structured verification results",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.28"
+    },
+    {
+      "requirement": "Source navigation comments",
+      "scenario": "Automated markup checks",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.29"
     }
   ],
   "checks": {
@@ -1153,13 +1230,12 @@
     ],
     "target": [
       {
-        "name": "scope-focused",
+        "name": "verifier-focused",
         "argv": [
           "go",
           "test",
-          "./internal/discovery",
-          "./internal/report",
-          "./cmd/secscan",
+          "./internal/tracecheck",
+          "./cmd/tracecheck",
           "-count=1"
         ]
       }

@@ -249,6 +249,11 @@
 - **AND** сложные trust/filtering boundaries имеют отдельные короткие контракты функций
 - **AND** комментарии не копируют task status/evidence и не требуют отдельной .grace модели
 
+#### Scenario: Automated markup checks
+- **WHEN** проверяется новый или изменённый Go module в cmd/ или internal/
+- **THEN** contract/map обязателен, marker pairs и ROLE/MAP_MODE согласованы, symbols/exports/links проверяются по AST и файлам
+- **AND** CI проверяет разметку и текущую evidence chain, сохраняя остальные обязательные gates
+
 ### Requirement: Scoped scans
 
 Система SHALL принимать до 16 file или directory scopes и раскрывать, какие scanners сузились, а какие анализировали весь repository.
@@ -394,6 +399,43 @@ requirements, реализующими components и подтверждающи�
 - **THEN** каждый добавленный, изменённый, удалённый или переименованный файл входит в declared implementation scope, governance scope или evidence sinks
 - **AND** для переименования scope проверяет исходный и целевой paths
 - **AND** выход за scope завершает проверку ошибкой с перечислением путей
+
+#### Scenario: Complete Git snapshot
+- **WHEN** HEAD, index или working tree отличаются от baseline
+- **THEN** scope учитывает объединение изменений всех трёх состояний, включая rename sources и untracked files
+- **AND** identity различает index и рабочую копию; восстановление рабочей копии не скрывает staged bytes
+- **AND** baseline является неизменяемым commit ID, а target/final отклоняют расхождение index и проверяемых файлов
+
+#### Scenario: Manifest-bound verification
+- **WHEN** verifier загружает manifest
+- **THEN** он принимает только ограниченный regular JSON внутри repository и связывает его фактические bytes и path с identity/evidence
+- **AND** замена manifest во время checks отклоняется, а произвольные evidence sinks запрещены
+
+#### Scenario: Trace reference validation
+- **WHEN** trace содержит deferred issue или test reference
+- **THEN** issue существует в Beads и принадлежит change, а test reference указывает допустимый test file или Go test symbol
+- **AND** README вместо test и несуществующий Beads ID отклоняются
+
+#### Scenario: Preimplementation baseline
+- **WHEN** запускается baseline
+- **THEN** implementation scope ещё не изменён относительно anchor
+- **AND** evidence фиксирует время запуска и завершения; поздний baseline не выдаётся за исходное состояние
+
+#### Scenario: Durable evidence chain
+- **WHEN** выполняется phase check
+- **THEN** полный versioned record сохраняется через br comments и переносится с JSONL
+- **AND** target ссылается на matching successful baseline, final на fresh successful target, с digest links и корректным порядком времени
+- **AND** проверка сохранённой цепочки подтверждает текущие code/index/manifest/authority без повторного запуска scanners
+
+#### Scenario: Legacy evidence retention
+- **WHEN** сохраняются существующие v1 или bootstrap records
+- **THEN** их исходные данные и ограничения явно помечены legacy и не удовлетворяют новым phase gates
+- **AND** отклонение baseline .17 сохраняется без выдуманных прошлых timestamps или успешных проверок
+
+#### Scenario: Structured verification results
+- **WHEN** исполняется объявленный go-test-json check
+- **THEN** evidence содержит passed/failed/skipped counts и ограниченную metadata output без сырых snippets
+- **AND** all-skipped acceptance не считается успешным выполненным анализом
 
 ### Requirement: Scanner preparation
 

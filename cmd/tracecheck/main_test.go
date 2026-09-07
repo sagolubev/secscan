@@ -1,3 +1,18 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify provenance and command preflights through the CLI boundary.
+// SCOPE: Temporary Git repositories and synthetic Beads responses.
+// DEPENDS: cmd/tracecheck/main.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestValidationBindsLoadedManifest - Different loaded check sets cannot share identity.
+// TestValidationRejectsUnresolvedDeferredIssue - Unknown deferred work fails validation.
+// TestPhaseRejectsMutationDuringChecks - Code, authority and manifest edits invalidate runs.
+// TestPhaseRejectsLateBaselineAndUnstagedTarget - Invalid phase state blocks commands.
+// END_MODULE_MAP
+
 package main
 
 import (
@@ -34,6 +49,55 @@ func TestValidateOnlyDoesNotRunPhaseChecks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "ran-check")); !os.IsNotExist(err) {
 		t.Errorf("validation ran a check: %v", err)
+	}
+}
+
+func TestValidationBindsLoadedManifest(t *testing.T) {
+	_, path := traceFixture(t)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alternate := filepath.Join(filepath.Dir(path), "alternate.json")
+	writeFixture(t, alternate, bytes.ReplaceAll(data, []byte("synthetic"), []byte("different-check")))
+	var identities []string
+	for _, name := range []string{path, alternate} {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"--manifest", name, "--validate-only"}, &stdout, &stderr); code != 0 {
+			t.Fatalf("validate %s: %s", name, &stderr)
+		}
+		var result validation
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		identities = append(identities, result.StateIdentity)
+	}
+	if identities[0] == identities[1] {
+		t.Error("validation ignored loaded manifest path/check set")
+	}
+	outside := filepath.Join(t.TempDir(), "trace.json")
+	writeFixture(t, outside, data)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", outside, "--validate-only"}, &stdout, &stderr); code != 1 {
+		t.Errorf("outside manifest exit=%d; want 1", code)
+	}
+}
+
+func TestValidationRejectsUnresolvedDeferredIssue(t *testing.T) {
+	_, path := traceFixture(t)
+	m, err := tracecheck.LoadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Traces[0].Disposition, m.Traces[0].Issue = "deferred", "missing.1"
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFixture(t, path, data)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", path, "--validate-only"}, &stdout, &stderr); code != 1 {
+		t.Errorf("unresolved deferred issue exit=%d; want 1", code)
 	}
 }
 
@@ -108,17 +172,21 @@ func TestPhaseRequiresChecksAndPreservesSuccessfulEvidence(t *testing.T) {
 			writeFixture(t, path, data)
 			stdout.Reset()
 			stderr.Reset()
+			stageFixture(t)
 			code := run(args, &stdout, &stderr)
 			var evidence tracecheck.Evidence
 			if code != 0 || json.Unmarshal(stdout.Bytes(), &evidence) != nil || !evidence.OK || evidence.Phase != phase || len(evidence.Checks) != 1 {
 				t.Errorf("passing %s phase exit=%d stdout=%s stderr=%s", phase, code, &stdout, &stderr)
+			}
+			if evidence.SchemaVersion != "2" || evidence.ID == "" || evidence.ManifestDigest == "" || evidence.StartedAt.IsZero() || evidence.FinishedAt.Before(evidence.StartedAt) {
+				t.Errorf("incomplete v2 provenance: %+v", evidence)
 			}
 		})
 	}
 }
 
 func TestPhaseRejectsMutationDuringChecks(t *testing.T) {
-	for _, action := range []string{"source", "authority"} {
+	for _, action := range []string{"source", "authority", "manifest"} {
 		t.Run(action, func(t *testing.T) {
 			_, manifest := traceFixture(t)
 			data, err := os.ReadFile(manifest)
@@ -126,6 +194,7 @@ func TestPhaseRejectsMutationDuringChecks(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeFixture(t, manifest, bytes.ReplaceAll(data, []byte("TRACECHECK_TEST_ACTION=marker"), []byte("TRACECHECK_TEST_ACTION="+action)))
+			stageFixture(t)
 			var stdout, stderr bytes.Buffer
 			code := run([]string{"--manifest", manifest, "--phase", "target", "--run"}, &stdout, &stderr)
 			var evidence tracecheck.Evidence
@@ -133,6 +202,13 @@ func TestPhaseRejectsMutationDuringChecks(t *testing.T) {
 				t.Errorf("phase(%s) exit=%d stdout=%s stderr=%s; want rejected evidence", action, code, &stdout, &stderr)
 			}
 		})
+	}
+}
+
+func stageFixture(t *testing.T) {
+	t.Helper()
+	if output, err := exec.Command("git", "add", ".").CombinedOutput(); err != nil {
+		t.Fatalf("stage fixture: %v: %s", err, output)
 	}
 }
 
@@ -145,11 +221,45 @@ func TestPhaseCheckProcess(t *testing.T) {
 		path, text = "source.go", "changed"
 	case "authority":
 		path, text = os.Getenv("TRACECHECK_TEST_ISSUE"), `[{"id":"test.1","parent":"test","title":"changed"}]`
+	case "manifest":
+		path = "openspec/changes/test/trace.json"
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text = string(bytes.ReplaceAll(data, []byte("synthetic"), []byte("changed-check")))
 	default:
 		return
 	}
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPhaseRejectsLateBaselineAndUnstagedTarget(t *testing.T) {
+	for _, phase := range []string{"baseline", "target", "final"} {
+		t.Run(phase, func(t *testing.T) {
+			root, path := traceFixture(t)
+			m, err := tracecheck.LoadManifest(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Checks[phase] = m.Checks["target"]
+			data, err := json.Marshal(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFixture(t, path, data)
+			stageFixture(t)
+			writeFixture(t, filepath.Join(root, "source.go"), []byte("package changed\n"))
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"--manifest", path, "--phase", phase, "--run"}, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
+				t.Errorf("invalid %s state exit=%d stdout=%s stderr=%s", phase, code, &stdout, &stderr)
+			}
+			if _, err := os.Stat(filepath.Join(root, "ran-check")); !os.IsNotExist(err) {
+				t.Error("phase ran checks despite invalid state")
+			}
+		})
 	}
 }
 
@@ -177,6 +287,7 @@ func traceFixture(t *testing.T) (string, string) {
 	for _, path := range []string{"source.go", "source_test.go"} {
 		writeFixture(t, filepath.Join(root, path), []byte("package example\n"))
 	}
+	writeFixture(t, filepath.Join(root, "source_test.go"), []byte("package example\nimport \"testing\"\nfunc TestExample(t *testing.T) {}\n"))
 	for _, args := range [][]string{
 		{"init", "--quiet"}, {"add", "."}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "fixture"},
 	} {

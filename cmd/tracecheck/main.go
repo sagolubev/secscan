@@ -1,8 +1,23 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Validate scope and run declared verification phases.
+// SCOPE: Check state before and after commands; validation-only never claims test success.
+// DEPENDS: cmd/tracecheck/main_test.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
+// ROLE: RUNTIME
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// run - Validate arguments and coordinate phase checks.
+// phaseState - Reject late baselines and split index/worktree states.
+// validate - Bind manifest, references, Git state and Beads authority.
+// END_MODULE_MAP
+
 package main
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -51,7 +66,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	manifest, err := tracecheck.LoadManifest(filepath.Join(root, *manifestPath))
+	manifest, err := tracecheck.LoadRepositoryManifest(root, *manifestPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -72,11 +87,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+	if err := phaseState(root, manifest, *phase, before.Changes); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 
+	started := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	results, ok := tracecheck.RunChecks(ctx, root, manifest.Checks[*phase])
-	after, err := validate(root, manifest, *phase != "baseline")
+	reloaded, err := tracecheck.LoadRepositoryManifest(root, manifest.SourcePath)
+	var after validation
+	if err == nil {
+		after, err = validate(root, reloaded, *phase != "baseline")
+	}
+	if err == nil {
+		err = phaseState(root, reloaded, *phase, after.Changes)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "verification state changed during checks: %v\n", err)
 		ok = false
@@ -85,15 +112,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		ok = false
 	}
 	evidence := tracecheck.Evidence{
-		SchemaVersion: "1",
-		Phase:         *phase,
-		Baseline:      manifest.BaselineCommit,
-		Outcome:       manifest.TargetOutcome,
-		StateIdentity: before.StateIdentity,
-		AuthorityHash: before.AuthorityHash,
-		Changes:       before.Changes,
-		Checks:        results,
-		OK:            ok,
+		SchemaVersion:  "2",
+		StateAlgorithm: tracecheck.StateAlgorithm,
+		ManifestPath:   manifest.SourcePath,
+		ManifestDigest: manifest.Digest,
+		StartedAt:      started,
+		FinishedAt:     time.Now().UTC(),
+		Phase:          *phase,
+		Baseline:       manifest.BaselineCommit,
+		Outcome:        manifest.TargetOutcome,
+		StateIdentity:  before.StateIdentity,
+		AuthorityHash:  before.AuthorityHash,
+		Changes:        before.Changes,
+		Checks:         results,
+		OK:             ok,
+	}
+	if err := evidence.Seal(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 	if err := json.NewEncoder(stdout).Encode(evidence); err != nil {
 		fmt.Fprintln(stderr, err)
@@ -105,28 +141,40 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func phaseState(root string, manifest tracecheck.Manifest, phase string, changes []tracecheck.Change) error {
+	if phase == "baseline" {
+		return tracecheck.ValidateBaseline(manifest.Scope, changes)
+	}
+	return tracecheck.ValidateIndexAgreement(root, manifest.Scope, changes)
+}
+
 type validation struct {
-	SchemaVersion string              `json:"schemaVersion"`
-	Mode          string              `json:"mode"`
-	Baseline      string              `json:"baselineCommit"`
-	Outcome       string              `json:"targetOutcome"`
-	StateIdentity string              `json:"stateIdentity"`
-	AuthorityHash string              `json:"authorityHash"`
-	Changes       []tracecheck.Change `json:"changes"`
+	StateAlgorithm string              `json:"stateAlgorithm"`
+	ManifestPath   string              `json:"manifestPath"`
+	ManifestDigest string              `json:"manifestDigest"`
+	SchemaVersion  string              `json:"schemaVersion"`
+	Mode           string              `json:"mode"`
+	Baseline       string              `json:"baselineCommit"`
+	Outcome        string              `json:"targetOutcome"`
+	StateIdentity  string              `json:"stateIdentity"`
+	AuthorityHash  string              `json:"authorityHash"`
+	Changes        []tracecheck.Change `json:"changes"`
 }
 
 func validate(root string, manifest tracecheck.Manifest, requirePaths bool) (validation, error) {
-	result := validation{SchemaVersion: "1", Mode: "validation-only", Baseline: manifest.BaselineCommit, Outcome: manifest.TargetOutcome}
-	spec, err := os.Open(filepath.Join(root, manifest.Spec))
+	result := validation{SchemaVersion: "2", Mode: "validation-only", Baseline: manifest.BaselineCommit, Outcome: manifest.TargetOutcome, StateAlgorithm: tracecheck.StateAlgorithm, ManifestPath: manifest.SourcePath, ManifestDigest: manifest.Digest}
+	spec, err := tracecheck.ReadRepositoryFile(root, manifest.Spec)
 	if err != nil {
 		return result, err
 	}
-	refs, err := tracecheck.ParseScenarios(spec)
-	spec.Close()
+	refs, err := tracecheck.ParseScenarios(bytes.NewReader(spec))
 	if err != nil {
 		return result, err
 	}
 	if err := tracecheck.ValidateTrace(root, manifest, refs, requirePaths); err != nil {
+		return result, err
+	}
+	if err := tracecheck.ValidateDeferred(root, manifest); err != nil {
 		return result, err
 	}
 	if err := tracecheck.ValidateStaleness(filepath.Join(root, "openspec", "changes", manifest.Change)); err != nil {
@@ -143,6 +191,7 @@ func validate(root string, manifest tracecheck.Manifest, requirePaths bool) (val
 	if err != nil {
 		return result, err
 	}
+	result.StateIdentity = fmt.Sprintf("%x", sha256.Sum256([]byte(result.StateIdentity+"\x00"+manifest.SourcePath+"\x00"+manifest.Digest)))
 	result.AuthorityHash, err = tracecheck.AuthorityHash(root, manifest.TargetOutcome, manifest.Epic, manifest.Change)
 	return result, err
 }

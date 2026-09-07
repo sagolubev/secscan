@@ -50,7 +50,11 @@ func TestValidateTraceRequiresEveryScenario(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(fullPath, []byte("package main\n"), 0o644); err != nil {
+		content := "package main\n"
+		if strings.HasSuffix(path, "_test.go") {
+			content = "package main\nimport \"testing\"\nfunc TestExample(t *testing.T) {}\n"
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -129,7 +133,7 @@ func TestParseChangesPreservesBothRenamePaths(t *testing.T) {
 }
 
 func TestStateIdentityIgnoresEvidenceSinkContent(t *testing.T) {
-	root := t.TempDir()
+	root, baseline := gitFixture(t, map[string]string{".beads/issues.jsonl": "before"})
 	path := filepath.Join(root, ".beads", "issues.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -140,14 +144,14 @@ func TestStateIdentityIgnoresEvidenceSinkContent(t *testing.T) {
 	scope := Scope{EvidenceSinks: []string{".beads/issues.jsonl"}}
 	changes := []Change{{Status: "M", Path: ".beads/issues.jsonl"}}
 
-	first, err := StateIdentity(root, "abc123", scope, changes)
+	first, err := StateIdentity(root, baseline, scope, changes)
 	if err != nil {
 		t.Fatalf("StateIdentity() error = %v", err)
 	}
 	if err := os.WriteFile(path, []byte("second"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	second, err := StateIdentity(root, "abc123", scope, changes)
+	second, err := StateIdentity(root, baseline, scope, changes)
 	if err != nil {
 		t.Fatalf("StateIdentity() error = %v", err)
 	}
@@ -157,7 +161,7 @@ func TestStateIdentityIgnoresEvidenceSinkContent(t *testing.T) {
 }
 
 func TestStateIdentityIncludesFileMode(t *testing.T) {
-	root := t.TempDir()
+	root, baseline := gitFixture(t, map[string]string{"cmd/tool": "content"})
 	path := filepath.Join(root, "cmd", "tool")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -167,14 +171,14 @@ func TestStateIdentityIncludesFileMode(t *testing.T) {
 	}
 	scope := Scope{Implementation: []string{"cmd/"}}
 	changes := []Change{{Status: "M", Path: "cmd/tool"}}
-	first, err := StateIdentity(root, "abc123", scope, changes)
+	first, err := StateIdentity(root, baseline, scope, changes)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	second, err := StateIdentity(root, "abc123", scope, changes)
+	second, err := StateIdentity(root, baseline, scope, changes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +188,7 @@ func TestStateIdentityIncludesFileMode(t *testing.T) {
 }
 
 func TestStateIdentityRejectsSensitiveRenameSource(t *testing.T) {
+	root, baseline := gitFixture(t, nil)
 	scope := Scope{
 		Governance:    []string{".env", "safe.txt"},
 		EvidenceSinks: []string{".beads/issues.jsonl"},
@@ -194,7 +199,7 @@ func TestStateIdentityRejectsSensitiveRenameSource(t *testing.T) {
 		Path:    ".beads/issues.jsonl",
 	}}
 
-	if _, err := StateIdentity(t.TempDir(), "abc123", scope, changes); err == nil {
+	if _, err := StateIdentity(root, baseline, scope, changes); err == nil {
 		t.Fatal("StateIdentity() error = nil, want sensitive old path error")
 	}
 }

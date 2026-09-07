@@ -18,6 +18,20 @@
 сравнения — [`c406ed3`][secscan-base]. Это исследование; настройки и workflow
 проекта не менялись.
 
+Обновление 7 сентября: исправлен локальный verifier. Он учитывает HEAD, index
+и рабочее дерево, связывает результат с точными байтами и путём manifest,
+отклоняет baseline после изменения implementation и требует совпадения index
+с рабочим деревом для target/final. Перед этими фазами выполните `git add`
+для проверяемых файлов. Baseline задаётся полным commit SHA.
+Sparse checkout и флаги index `assume-unchanged`/`skip-worktree` не поддерживаются:
+verifier останавливается, поскольку Git может скрывать такие изменения.
+По той же причине verifier отклоняет явные attributes `text`, `crlf`,
+`eol`, `ident`, `filter` и `working-tree-encoding`, включая unset-формы.
+Настройка `core.autocrlf`
+не влияет на проверку: verifier сравнивает исходные байты.
+Evidence v2 содержит время начала/окончания, статус каждой команды и digest
+записи. Старый baseline перехода сохранён как legacy; новой цепочкой он не считается.
+
 ## Что делает исходная тула
 
 В CLI есть пять групп команд: `lint`, `status`, `module`, `verification`, `file`.

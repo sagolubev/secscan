@@ -787,3 +787,77 @@ a simultaneous refresh-versions fixture proves a whole-repository persona keeps
 its outside-scope finding and scope mode. Rollback: omit --scope or revert the
 additive outcome. Shared report/filter/snapshot behavior remains under regression
 tests and independent review.
+
+## GRACE assurance after the audit
+
+The correction has three bounded outcomes: Git/manifest identity, portable phase
+evidence, and code-navigation/CI enforcement. Preserve the existing OpenSpec and
+Beads authorities. Use the installed br comment API: a probe confirmed comment
+text survives JSONL export and import into a new database. No second evidence
+database or .grace projection is needed. Profile: bugfix for snapshot binding,
+feature for evidence/navigation guards; Comprehensive verification, including
+negative fixtures and independent review. Each outcome proves its real CLI seam.
+
+### Git and manifest binding
+
+Enumerate the union of baseline-to-HEAD, baseline-to-index and baseline-to-working
+tree diffs plus nonignored untracked files. Deduplicate identical changes and
+preserve all rename source/destination paths. Resolve the baseline as an immutable
+full commit ID, reject unresolved index conflicts, and disable external Git diff
+helpers. Identity v2 includes distinct index and worktree content/Git modes for
+every relevant path. It must detect staged-only bytes, mode changes, deletions
+and renames, and remain stable when matching staged bytes are committed. Only
+.beads/issues.jsonl may be an evidence sink. Secret-path guards remain in force.
+
+The loaded manifest must be a bounded regular JSON file inside the repository;
+bind its normalized path and exact byte digest into validation and evidence.
+Reject trailing/ambiguous JSON, escaping paths and unsupported sink exemptions.
+Reload it after checks so an edited alternate manifest invalidates the result.
+Baseline refuses any implementation change since its anchor. Target/final require
+index/worktree agreement outside the evidence sink; stage reviewed files first.
+Validation-only reports state but never implies executed tests. Verify deferred
+Beads IDs and parent/status, safe component references and recognizable test
+files/optional Go test symbols; semantic test sufficiency remains independent review.
+
+Emit schema-v2 evidence with identity algorithm, manifest path/digest, UTC start
+and finish, explicit check status and a deterministic record digest. This is an
+integrity reference, not a signature or proof that the operator is trustworthy.
+The first verifier correction uses its already captured v1 baseline honestly;
+it is archived as bootstrap legacy, not converted into a fictitious v2 chain.
+
+### Portable phase chain
+
+Append complete evidence as machine-tagged Beads comments through br. Records are
+content addressed and never replace earlier attempts. Target requires a successful
+baseline with matching outcome, anchor, authority and manifest; final requires a
+successful current target and links its digest. Baseline has no parent and proves
+preimplementation state. The manifest/check plan must remain fixed across a chain;
+unexpected scope or command changes require a new explicitly planned outcome.
+--verify-evidence loads the chain from Beads, checks digest links, phase order,
+timestamps, exact checks and current state without rerunning scanners. A clean
+clone must be able to verify it. Use this check before br close and in CI.
+
+Record passed/failed command states, bounded output byte counts/digests, and
+passed/failed/skipped counts for declared go-test-json checks. Do not commit raw
+stdout/stderr, config contents or secret-bearing snippets. A native acceptance
+check must have passed tests; an all-skipped run cannot satisfy it. Baseline checks
+for the first chain rollout stay compatible with the newly bootstrapped v2 runner.
+Preserve old v1 and unchained bootstrap evidence under a distinct legacy tag,
+with import provenance and limitations. Legacy records cannot satisfy new phase
+gates; .17 remains explicitly marked as captured after its regression edit.
+
+### Navigation and rollout
+
+Use Go AST parsing to check existing marked files and require contract/maps for
+new or changed Go source in cmd/ and internal/ for the selected outcome. Validate
+marker pairs, ROLE/MAP_MODE, mapped symbols/exports, dependency/link paths and Go
+symbol anchors. Fill audited missing metadata; do not require blanket decoration
+of unchanged legacy code. Keep checks inside tracecheck, not a parallel linter.
+Update AGENTS/README/development docs and CI to use the new chain and markup gates.
+Historical pilot documents retain their dated claims with a current-status note.
+
+Regression fixtures cover staged-only/out-of-scope changes, rename/mode/deletion,
+manifest substitution and mutation, late baseline, missing/stale/tampered chains,
+Beads round-trip persistence, fake task/test references, missing/stale code maps
+and all-skipped tests. Existing source and container gates remain. Rollback is an
+explicit corrective commit; never silently weaken the guards or rewrite evidence.

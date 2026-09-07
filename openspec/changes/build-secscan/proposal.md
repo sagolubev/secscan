@@ -77,6 +77,17 @@ complete scan and the visible report. Scopes must state which scanners actually
 narrowed their inputs. Token budgets, Git history, custom cached rules, broader
 runtime coverage and LLM annotation remain separate backlog outcomes.
 
+## GRACE assurance corrections
+
+Fix the audited verifier gaps without introducing .grace or another tracker.
+Include HEAD, index and worktree changes in scope checks and bind evidence to
+the loaded manifest. Add portable, linked phase records in Beads comments and a
+freshness check that CI can run without repeating scanners. Reject late baseline
+capture and incomplete phase chains. Preserve old evidence as explicitly legacy
+records, including the .17 baseline deviation. Enforce useful Go contract/maps
+and real trace references through the existing verifier and CI. These developer
+workflow changes do not change the released secscan scan contract.
+
 ## Capabilities
 
 ### New Capabilities
