@@ -3,31 +3,14 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.16",
-  "baselineCommit": "b341f7a6a28267b7d8d20b759ea1389890930998",
+  "targetOutcome": "secscan-ij8.17",
+  "baselineCommit": "561d7a5a7d806e713e1809e69a3b739538354abe",
   "scope": {
     "implementation": [
-      "internal/baseline/",
-      "internal/report/report.go",
-      "internal/report/report_test.go",
-      "internal/report/baseline.go",
-      "cmd/secscan/main.go",
-      "cmd/secscan/main_test.go",
-      "cmd/secscan/baseline.go",
-      "cmd/secscan/baseline_test.go",
-      "cmd/secscan/export_test.go",
-      "cmd/secscan/export.go",
-      "cmd/secscan/coverage_test.go",
-      "internal/discovery/inventory.go",
-      "internal/discovery/discovery_test.go",
-      "go.mod"
+      "internal/container/cancellation_test.go"
     ],
     "governance": [
-      "README.md",
-      "openspec/changes/build-secscan/trace.json",
-      "openspec/changes/build-secscan/design.md",
-      "openspec/changes/build-secscan/specs/secscan/spec.md",
-      "openspec/changes/build-secscan/.stale.json"
+      "openspec/changes/build-secscan/trace.json"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -1075,22 +1058,17 @@
     ],
     "target": [
       {
-        "name": "baseline-focused",
+        "name": "cancellation",
         "argv": [
           "go",
           "test",
-          "./internal/baseline",
-          "./internal/report",
-          "./internal/discovery",
-          "./cmd/secscan"
-        ]
-      },
-      {
-        "name": "workflow-lint",
-        "argv": [
-          "actionlint",
-          ".github/workflows/ci.yml",
-          ".github/workflows/release.yml"
+          "./internal/container",
+          "-run",
+          "TestAcceptanceCancellation",
+          "-count=1"
+        ],
+        "env": [
+          "SECSCAN_ACCEPTANCE=1"
         ]
       }
     ],
