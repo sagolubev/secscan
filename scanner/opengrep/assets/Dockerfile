@@ -2,13 +2,11 @@
 
 ARG TARGETARCH
 
-FROM opengrep-assets AS assets
-
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 ARG TARGETARCH
 
-COPY --from=assets /rootfs-${TARGETARCH}/ /
+COPY rootfs-${TARGETARCH}/ /
 
 LABEL org.opencontainers.image.source="https://github.com/sigiuscom/secscan" \
       org.opencontainers.image.version="1.29.0" \

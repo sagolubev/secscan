@@ -3,16 +3,14 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.24",
-  "baselineCommit": "66525fd3d2e2c07a8cb464fb2588729bbf9f61a7",
+  "targetOutcome": "secscan-ij8.30",
+  "baselineCommit": "97be1ecdde62c4a1f4be5a7768ab2fd466f17c64",
   "scope": {
     "implementation": [
-      "internal/container/",
-      "internal/scanner/",
-      "internal/gitleaks/",
-      "cmd/secscan/",
-      ".github/workflows/ci.yml",
-      ".github/scripts/"
+      "internal/opengrep/image.go",
+      "internal/opengrep/image_test.go",
+      "scanner/opengrep/assets/Dockerfile",
+      "scanner/opengrep/test-image.sh"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -1496,6 +1494,19 @@
         "internal/container/namespace_test.go",
         "internal/container/namespace_acceptance_test.go"
       ]
+    },
+    {
+      "requirement": "Container runtime",
+      "scenario": "Portable scanner image build",
+      "disposition": "target",
+      "components": [
+        "internal/opengrep/image.go",
+        "scanner/opengrep/assets/Dockerfile"
+      ],
+      "tests": [
+        "internal/opengrep/image_test.go",
+        "cmd/secscan/render_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1518,14 +1529,12 @@
         ]
       },
       {
-        "name": "existing-runtime-boundary",
+        "name": "existing-image-boundary",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/container",
-          "./internal/scanner",
-          "./internal/gitleaks",
+          "./internal/opengrep",
           "./cmd/secscan",
           "-count=1"
         ]
@@ -1533,16 +1542,22 @@
     ],
     "target": [
       {
-        "name": "namespace-focused",
+        "name": "portable-image-focused",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/container",
-          "./internal/scanner",
-          "./internal/gitleaks",
+          "./internal/opengrep",
           "./cmd/secscan",
           "-count=1"
+        ]
+      },
+      {
+        "name": "image-smoke-syntax",
+        "argv": [
+          "sh",
+          "-n",
+          "scanner/opengrep/test-image.sh"
         ]
       }
     ],

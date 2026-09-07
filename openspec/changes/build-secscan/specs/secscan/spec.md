@@ -54,6 +54,11 @@
 - **THEN** сохраняется прежний порядок Docker, затем Podman
 - **AND** namespace mode берётся из проверенного daemon metadata, а не из host OS или UID
 
+#### Scenario: Portable scanner image build
+- **WHEN** update собирает собственный Opengrep image через Docker или Podman
+- **THEN** binary, rules и licenses берутся из одного проверенного private local context без registry lookup для имени вспомогательного context
+- **AND** сохраняются pinned base image, проверенные binary bytes, metadata и offline scanner boundary
+
 #### Scenario: Runtime unavailable
 - **WHEN** ни Docker, ни Podman daemon недоступны
 - **THEN** secscan объясняет, какой runtime был обнаружен и почему соединение не удалось

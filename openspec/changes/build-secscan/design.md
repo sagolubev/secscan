@@ -1144,3 +1144,27 @@ with focused tests, then full existing gates and independent security review.
 Rollback reverts this additive transport/selection commit; cache format stays
 unchanged. Least confident: daemon cp ownership semantics differ by backend;
 native regression checks, not shared flag assumptions, protect this decision.
+
+
+## Portable Opengrep build context
+
+Outcome .30 is a bounded bug correction discovered by native .24 acceptance;
+Feature/Standard/Comprehensive remain applicable. Podman4.9 accepts a directory
+build-context for COPY but tries to resolve FROM opengrep-assets as an external
+image. Both architecture rootfs trees already exist in the private main context.
+Remove that redundant stage and named-context argument, then COPY the selected
+rootfs directly. A native scratch-image probe confirmed Podman provides TARGETARCH
+and accepts this direct COPY; no compatibility template or registry alias is
+needed. Keep base digest, asset checksums, labels, rules, licenses, numeric user,
+private per-build staging and timestamps. Cache schema and image tag contract
+stay unchanged; update still builds before trusting the tag.
+
+Update the standalone scanner image smoke script to use the staged assets as
+its main context and native Docker/Podman pull/provenance flags. Do not change
+its expected findings or hide build failures. Existing native CLI Python/HTML/
+SARIF acceptance is the behavioral regression: before the fix it fails at FROM
+on Podman, after it must pass on Podman rootless, Docker rootless and Docker
+userns-remap. Focused image tests and full container gates preserve Docker and
+rule-pack behavior. .24 remains open and depends on this correction; its earlier
+final record covers its frozen declared checks, not the previously failing
+Podman build acceptance. Rollback reverts only this portable context change.

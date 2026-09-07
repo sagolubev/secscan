@@ -57,14 +57,15 @@ prepare_rootfs() {
 prepare_rootfs amd64
 prepare_rootfs arm64
 
-"$runtime" build \
-    --pull=false \
-    --provenance=false \
+set -- --pull=false --provenance=false
+case "${runtime##*/}" in
+    podman) set -- --pull=missing ;;
+esac
+"$runtime" build "$@" \
     --build-arg SOURCE_DATE_EPOCH=1787938317 \
-    --build-context "opengrep-assets=$assets" \
     --tag "$tag" \
     --file "$source_assets/Dockerfile" \
-    "$source_assets"
+    "$assets"
 "$runtime" run --rm --network none "$tag" --version | grep -F "1.29.0"
 test "$("$runtime" image inspect --format '{{.Config.User}}' "$tag")" = "65532:65532"
 test "$("$runtime" image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$tag")" = "1.29.0"

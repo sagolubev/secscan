@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify pinned image inputs, portable context arguments and immutable private staging.
+// SCOPE: Synthetic assets; native CLI acceptance verifies the actual Docker and Podman builds.
+// DEPENDS: internal/opengrep/image.go, scanner/opengrep/assets/Dockerfile
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-container-runtime, cmd/secscan/render_test.go#TestAcceptanceRenderedReports
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestBuildArgsUsePinnedDefinition - Use one local context with pinned build metadata.
+// TestEmbeddedRulePackMatchesConstants - Check embedded rule identity.
+// TestRulePackMetadataIsDeterministic - Keep rule hashing stable.
+// TestParseImageMetadata - Reject mutable image tags.
+// TestEnsureImageAlwaysBuildsBeforeTrustingTag - Verify every preparation rebuilds.
+// TestBuildContextsArePrivateAndStable - Keep concurrent contexts independent.
+// END_MODULE_MAP
+
 package opengrep
 
 import (
@@ -34,7 +51,6 @@ func TestBuildArgsUsePinnedDefinition(t *testing.T) {
 		"build",
 		"--pull=false",
 		"--provenance=false",
-		"--build-context", "opengrep-assets=" + assets,
 		"--tag", ImageTag,
 		"--file", filepath.Join(assets, "Dockerfile"),
 		assets,
@@ -42,6 +58,9 @@ func TestBuildArgsUsePinnedDefinition(t *testing.T) {
 		if !slices.Contains(args, required) {
 			t.Errorf("BuildArgs() missing %q: %q", required, args)
 		}
+	}
+	if slices.Contains(args, "--build-context") {
+		t.Fatal("image build requires a named context unsupported by Podman FROM")
 	}
 }
 

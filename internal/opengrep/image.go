@@ -1,3 +1,26 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Prepare verified Opengrep binaries, rules and licenses in a private image context.
+// SCOPE: Pin downloads and image metadata; build from one local context on Docker and Podman.
+// DEPENDS: internal/container/runtime.go, scanner/opengrep/assets/Dockerfile
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-container-runtime, internal/opengrep/image_test.go#TestBuildContextsArePrivateAndStable, cmd/secscan/render_test.go#TestAcceptanceRenderedReports
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// ImageTag - Local prepared image name.
+// EngineVersion - Pinned upstream version.
+// RulePackDigest - Expected embedded rule identity.
+// RuleCount - Expected embedded rule count.
+// ImageMetadata - Verified engine and rule metadata.
+// RuleMetadata - Rule content identity and count.
+// BuildArgs - Build from the single verified local context.
+// EnsureImage - Prepare and build the pinned engine image.
+// EnsureAssets - Verify downloads and stage a private context.
+// InspectArgs - Read engine and rule image labels.
+// ParseImageMetadata - Decode immutable engine metadata.
+// RulePackMetadata - Hash sorted rule records.
+// END_MODULE_MAP
+
 package opengrep
 
 import (
@@ -65,13 +88,13 @@ type RuleMetadata struct {
 	RuleCount int
 }
 
+// BuildArgs uses one verified local context, supported by Docker and Podman.
 func BuildArgs(assetsDir string) []string {
 	return []string{
 		"build",
 		"--pull=false",
 		"--provenance=false",
 		"--build-arg", "SOURCE_DATE_EPOCH=1787938317",
-		"--build-context", "opengrep-assets=" + assetsDir,
 		"--tag", ImageTag,
 		"--file", filepath.Join(assetsDir, "Dockerfile"),
 		assetsDir,
