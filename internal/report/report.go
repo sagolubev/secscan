@@ -135,6 +135,8 @@ type Finding struct {
 	Origin      string     `json:"origin"`
 	Language    string     `json:"language,omitempty"`
 	Severity    string     `json:"severity,omitempty"`
+
+	BaselineStatus string `json:"baselineStatus,omitempty"`
 }
 
 func Marshal(input Report) ([]byte, error) {
@@ -178,7 +180,7 @@ func Normalize(input []Finding) []Finding {
 	for i, f := range input {
 		parents[i] = i
 		if f.Kind == "code" && strings.HasPrefix(f.RuleID, "secscan.") && (slices.Contains(f.Sources, "semgrep") || slices.Contains(f.Sources, "opengrep")) {
-			key := fmt.Sprintf("code\x00%s\x00%s\x00%s\x00%d\x00%d", f.RuleID, f.Language, f.Path, f.Line, f.EndLine)
+			key := fmt.Sprintf("code\x00%s\x00%s\x00%s\x00%s\x00%s\x00%d\x00%d", f.RuleID, f.Language, f.Origin, f.ImageDigest, f.Path, f.Line, f.EndLine)
 			if prior, ok := seen[key]; ok {
 				parents[root(i)] = root(prior)
 			} else {
@@ -272,5 +274,13 @@ func findingPackageKey(f Finding) string {
 	return key
 }
 func severityRank(value string) int {
+	switch value {
+	case "info":
+		value = "informational"
+	case "warning":
+		value = "medium"
+	case "error":
+		value = "high"
+	}
 	return slices.Index([]string{"", "unknown", "informational", "low", "medium", "high", "critical"}, value)
 }
