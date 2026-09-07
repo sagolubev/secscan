@@ -90,3 +90,15 @@ func TestParseInfersSharedRuleLanguage(t *testing.T) {
 		t.Fatalf("inferred finding=%#v want %#v", inferred.Findings[0], explicit.Findings[0])
 	}
 }
+
+func TestParseValidatesReadEvidencePaths(t *testing.T) {
+	for _, path := range []string{"../outside.py", "/outside.py"} {
+		data, err := json.Marshal(map[string]any{"version": "1.29.0", "results": []any{}, "errors": []any{}, "paths": map[string]any{"scanned": []string{path}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Parse(data, "python"); err == nil {
+			t.Errorf("outside read path %q accepted", path)
+		}
+	}
+}

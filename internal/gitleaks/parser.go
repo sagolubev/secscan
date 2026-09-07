@@ -1,3 +1,15 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Convert untrusted Gitleaks JSON into canonical findings.
+// SCOPE: Reject paths outside the repository; omit Secret and Match fields.
+// DEPENDS: internal/report/report.go
+// LINKS: openspec/changes/build-secscan/trace.json, internal/gitleaks/parser_test.go#TestParseRedactsSecretMaterial, internal/gitleaks/parser_test.go#TestParseRejectsPathOutsideRepository
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Parse - Decode findings and enforce repository-relative paths.
+// END_MODULE_MAP
+
 package gitleaks
 
 import (
@@ -18,6 +30,15 @@ type finding struct {
 	RuleID      string `json:"RuleID"`
 }
 
+// START_CONTRACT: Parse
+// PURPOSE: Keep raw scanner content behind the adapter boundary.
+// INPUTS: data: []byte - Untrusted Gitleaks JSON.
+// OUTPUTS: Canonical findings or error; secret values and snippets are omitted.
+// SIDE_EFFECTS: none
+// LINKS: internal/gitleaks/parser_test.go#TestParseRedactsSecretMaterial
+// END_CONTRACT: Parse
+
+// Parse converts Gitleaks JSON into sanitized repository findings.
 func Parse(data []byte) ([]report.Finding, error) {
 	var input []finding
 	if err := json.Unmarshal(data, &input); err != nil {

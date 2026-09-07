@@ -1,3 +1,26 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Normalize scanner findings and encode the canonical JSON report.
+// SCOPE: Keep deterministic identities and ordering; preserve source coverage independently of findings.
+// DEPENDS: internal/report/inventory.go, internal/report/trivy.go
+// LINKS: openspec/changes/build-secscan/trace.json, internal/report/report_test.go#TestMarshalSortsFindings, internal/report/report_test.go#TestDependencyAliasMergeTransitiveAndStable
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Report - Canonical scan result.
+// Engine - Underlying engine evidence.
+// Image - Resolved image identity.
+// Scanner - Status, coverage and prepared assets.
+// Feed - Advisory snapshot identity.
+// Coverage - Positive reads and explicit gaps.
+// Exclusions - Legacy ignored counters.
+// Package - Versioned dependency identity.
+// Location - Repository-relative finding location.
+// Finding - Sanitized finding and provenance.
+// Marshal - Encode deterministic JSON.
+// Normalize - Merge matching findings without mutating inputs.
+// END_MODULE_MAP
+
 package report
 
 import (
@@ -11,11 +34,13 @@ import (
 )
 
 type Report struct {
-	SchemaVersion string     `json:"schemaVersion"`
-	Repository    string     `json:"repository"`
-	Scanners      []Scanner  `json:"scanners"`
-	Findings      []Finding  `json:"findings"`
-	Exclusions    Exclusions `json:"exclusions"`
+	Inventory       *Inventory       `json:"inventory,omitempty"`
+	UncheckedInputs []UncheckedInput `json:"uncheckedInputs,omitempty"`
+	SchemaVersion   string           `json:"schemaVersion"`
+	Repository      string           `json:"repository"`
+	Scanners        []Scanner        `json:"scanners"`
+	Findings        []Finding        `json:"findings"`
+	Exclusions      Exclusions       `json:"exclusions"`
 }
 
 // Engine records one scanner engine in a combined persona.

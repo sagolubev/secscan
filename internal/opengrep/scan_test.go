@@ -26,6 +26,7 @@ func TestScanReturnsPinnedCoverage(t *testing.T) {
 	runner := &fakeRunner{output: []byte(`{
 		"version":"1.29.0",
 		"results":[],
+        "paths":{"scanned":["/target/a.py","/target/b.py","/target/c.py"]},
 		"errors":[]
 	}`)}
 	var events []progress.Event
@@ -106,5 +107,20 @@ func TestAcceptanceOpengrepLanguages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestScanUsesConfirmedReadPaths(t *testing.T) {
+	runner := &fakeRunner{output: []byte(`{"version":"1.29.0","results":[],"errors":[],"paths":{"scanned":["/target/a.py"]}}`)}
+	scanner, _, err := Scan(context.Background(), runner, "sha256:abc", "python", "/target", 3, func(progress.Event) {})
+	if err != nil || scanner.Coverage.Read != 1 || scanner.Coverage.Unread != 2 || !slices.Equal(scanner.Coverage.ReadInputs, []string{"a.py"}) {
+		t.Fatalf("confirmed coverage=%+v err=%v", scanner.Coverage, err)
+	}
+}
+
+func TestScanRejectsMissingReadEvidence(t *testing.T) {
+	runner := &fakeRunner{output: []byte(`{"version":"1.29.0","results":[],"errors":[]}`)}
+	if _, _, err := Scan(context.Background(), runner, "sha256:abc", "python", "/target", 1, func(progress.Event) {}); err == nil {
+		t.Fatal("scan without read paths accepted")
 	}
 }

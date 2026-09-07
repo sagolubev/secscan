@@ -1,16 +1,38 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Build safe Git-selected inventories and staged scanner trees.
+// SCOPE: Separate metadata counts from analysis; reject symlink traversal.
+// DEPENDS: internal/discovery/inventory.go, internal/report/inventory.go
+// LINKS: openspec/changes/build-secscan/trace.json, internal/discovery/discovery_test.go#TestTraversalInventory, internal/discovery/discovery_test.go#TestStageRejectsIntermediateSymlink
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Exclusions - Legacy ignored file and byte counts.
+// Inventory - Selected paths, scanner candidates and traversal metadata.
+// Discover - Classify safe Git entries and disclose omissions.
+// Stage - Copy selected regular files into an owned temporary tree.
+// DependencyEcosystem - Recognize dependency candidates without executing project code.
+// END_MODULE_MAP
+
 package discovery
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/sagolubev/secscan/internal/report"
 )
+
+var errSymlink = errors.New("symlink is not allowed")
 
 type Exclusions struct {
 	Files int   `json:"files"`
@@ -18,6 +40,10 @@ type Exclusions struct {
 }
 
 type Inventory struct {
+	Files     []string
+	Sources   []SourceInput
+	Traversal report.Inventory
+
 	Native       []string
 	OCI          []string
 	Dependencies []string
@@ -34,17 +60,13 @@ type Inventory struct {
 	Ignored      Exclusions
 }
 
-func Discover(root string) (Inventory, error) {
-	selected, err := gitPaths(root, "--cached", "--others", "--exclude-standard")
+// Discover enumerates Git paths; excluded paths are explicit relative control files.
+func Discover(root string, excluded ...string) (Inventory, error) {
+	selected, traversal, err := enumerate(root, excluded)
 	if err != nil {
 		return Inventory{}, err
 	}
-	ignored, err := gitPaths(root, "--others", "--ignored", "--exclude-standard")
-	if err != nil {
-		return Inventory{}, err
-	}
-
-	inventory := Inventory{}
+	inventory := Inventory{Files: selected, Traversal: traversal}
 	for _, path := range selected {
 		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(path)))
 		if os.IsNotExist(err) {
@@ -57,12 +79,17 @@ func Discover(root string) (Inventory, error) {
 			continue
 		}
 
+		language := SourceLanguage(path)
+		if language != "" {
+			inventory.Sources = append(inventory.Sources, SourceInput{Path: path, Language: language})
+		}
 		base := filepath.Base(path)
 		if DependencyEcosystem(path) != "" {
 			inventory.Dependencies = append(inventory.Dependencies, path)
 		}
 		yaml := strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")
-		if base == "versions.properties" || base == "build.gradle" || base == "build.gradle.kts" || strings.HasSuffix(base, ".versions.toml") {
+		native := base == "versions.properties" || base == "build.gradle" || base == "build.gradle.kts" || strings.HasSuffix(base, ".versions.toml")
+		if native {
 			inventory.Native = append(inventory.Native, path)
 		}
 		if yaml || base == "Dockerfile" || strings.HasPrefix(base, "Dockerfile.") {
@@ -100,6 +127,9 @@ func Discover(root string) (Inventory, error) {
 		if terraform || general {
 			inventory.KICS = append(inventory.KICS, path)
 		}
+		if language == "" && DependencyEcosystem(path) == "" && !native && !zizmor && !poutine && !terraform && !general {
+			inventory.Traversal.Unclassified = append(inventory.Traversal.Unclassified, path)
+		}
 
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".java", ".py", ".rb", ".rake", ".js", ".jsx", ".ts", ".tsx", ".php", ".go", ".go2":
@@ -119,17 +149,19 @@ func Discover(root string) (Inventory, error) {
 	sort.Strings(inventory.CI)
 	sort.Strings(inventory.Python)
 	sort.Strings(inventory.TypeScript)
-	for _, path := range ignored {
-		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(path)))
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		inventory.Ignored.Files++
-		inventory.Ignored.Bytes += info.Size()
-	}
+	inventory.Ignored = Exclusions{Files: traversal.Ignored.Files, Bytes: traversal.Ignored.Bytes}
 	return inventory, nil
 }
 
+// START_CONTRACT: Stage
+// PURPOSE: Give containers only explicitly selected regular files.
+// INPUTS: root: string - Worktree root. files: []string - Relative paths.
+// OUTPUTS: Owned temporary directory; caller must remove it, or error.
+// SIDE_EFFECTS: Creates private files in the user cache; reads no symlink targets.
+// LINKS: internal/discovery/discovery_test.go#TestStageRejectsIntermediateSymlink
+// END_CONTRACT: Stage
+
+// Stage copies selected regular files into a private tree owned by the caller.
 func Stage(root string, files []string) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -184,7 +216,7 @@ func safeSource(root, clean string) (string, error) {
 			return "", err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("symlink component %q is not allowed", component)
+			return "", fmt.Errorf("%w: component %q", errSymlink, component)
 		}
 	}
 	return current, nil
@@ -204,7 +236,7 @@ func gitPaths(root string, args ...string) ([]string, error) {
 		}
 	}
 	sort.Strings(paths)
-	return paths, nil
+	return slices.Compact(paths), nil
 }
 
 func copyFile(source, destination string) error {
@@ -299,6 +331,9 @@ func DependencyEcosystem(file string) string {
 		return "NuGet"
 	case "pom.xml", "build.gradle", "build.gradle.kts", "gradle.lockfile":
 		return "Maven"
+	}
+	if strings.HasSuffix(file, ".csproj") || strings.HasSuffix(file, ".fsproj") || strings.HasSuffix(file, ".vbproj") {
+		return "NuGet"
 	}
 	if strings.HasSuffix(file, ".versions.toml") {
 		return "Maven"

@@ -243,3 +243,80 @@ func TestNativeOCIInventory(t *testing.T) {
 		t.Fatalf("native/OCI inventory=%#v err=%v", got, err)
 	}
 }
+
+func TestTraversalInventory(t *testing.T) {
+	root := newGitRepository(t)
+	writeFile(t, root, "src/a.py", "aaaa")
+	writeFile(t, root, "src/nested/b.ts", "bbb")
+	writeFile(t, root, "cache/one.bin", "12345")
+	writeFile(t, root, "cache/nested/two.bin", "12")
+	writeFile(t, root, "notes.txt", "notes")
+	writeFile(t, root, ".gitignore", "cache/\n")
+	runGit(t, root, "add", "src/a.py", ".gitignore")
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Traversal.Tracked.Files != 2 || got.Traversal.Tracked.Bytes != 11 || got.Traversal.Untracked.Files != 2 || got.Traversal.Untracked.Bytes != 8 || got.Traversal.Ignored.Files != 2 || got.Traversal.Ignored.Bytes != 7 {
+		t.Fatalf("Discover traversal=%+v", got.Traversal)
+	}
+	if len(got.Files) != 4 {
+		t.Fatalf("eligible files=%v,want4", got.Files)
+	}
+	dirs := got.Traversal.Ignored.Directories
+	if len(dirs) != 2 || dirs[0].Path != "cache" || dirs[0].Files != 1 || dirs[0].Bytes != 5 || dirs[1].Path != "cache/nested" || dirs[1].Files != 1 || dirs[1].Bytes != 2 {
+		t.Fatalf("non-recursive ignored directories=%+v", dirs)
+	}
+}
+
+func TestTraversalOmitsSymlinksAndMissingEntries(t *testing.T) {
+	root := newGitRepository(t)
+	writeFile(t, root, "gone.py", "old")
+	writeFile(t, root, "folder/child.py", "old")
+	runGit(t, root, "add", "gone.py", "folder/child.py")
+	if err := os.Remove(filepath.Join(root, "gone.py")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(root, "folder")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	writeFile(t, outside, "child.py", "outside")
+	if err := os.Symlink(outside, filepath.Join(root, "folder")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "child.py"), filepath.Join(root, "link.py")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 0 || len(got.Python) != 0 {
+		t.Fatalf("unsafe files selected: %v %v", got.Files, got.Python)
+	}
+	omitted := map[string]string{}
+	for _, item := range got.Traversal.Omitted {
+		omitted[item.Path] = item.Reason
+	}
+	if omitted["gone.py"] != "missing" || omitted["folder/child.py"] != "symlink" || omitted["link.py"] != "symlink" {
+		t.Fatalf("omissions=%v", omitted)
+	}
+}
+
+func TestTraversalControlFilesAndUnclassifiedInputs(t *testing.T) {
+	root := newGitRepository(t)
+	writeFile(t, root, "baseline.json", "untrusted control bytes")
+	writeFile(t, root, "notes.md", "documentation")
+	writeFile(t, root, "program.rs", "fn main() {}")
+	got, err := Discover(root, "baseline.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 2 || len(got.Checkov) != 0 || len(got.Traversal.Omitted) != 1 || got.Traversal.Omitted[0].Path != "baseline.json" || got.Traversal.Omitted[0].Reason != "control_file" {
+		t.Fatalf("control file inventory=%+v", got)
+	}
+	if !reflect.DeepEqual(got.Traversal.Unclassified, []string{"notes.md"}) || len(got.Sources) != 1 || got.Sources[0].Language != "rust" {
+		t.Fatalf("classification=%+v", got)
+	}
+}

@@ -49,6 +49,9 @@ func Scan(
 		Status:  progress.StatusRunning,
 		Files:   fileCount,
 	})
+	if parsed.Version != EngineVersion || len(parsed.ReadInputs) == 0 || len(parsed.ReadInputs) > fileCount {
+		return report.Scanner{Coverage: report.Coverage{Unit: "files", Unread: fileCount}}, parsed.Findings, fmt.Errorf("Opengrep input coverage is unconfirmed")
+	}
 	scanner := report.Scanner{
 		Name:           name,
 		Status:         "success",
@@ -57,9 +60,11 @@ func Scan(
 		RulePackDigest: RulePackDigest,
 		RuleCount:      languageRuleCount(language),
 		Coverage: report.Coverage{
-			Read:   fileCount,
-			Failed: 0,
-			Unit:   "files",
+			Read:       len(parsed.ReadInputs),
+			ReadInputs: parsed.ReadInputs,
+			Unread:     fileCount - len(parsed.ReadInputs),
+			Failed:     0,
+			Unit:       "files",
 		},
 	}
 	emit(progress.Event{

@@ -237,6 +237,9 @@ func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
 	if out, err := exec.Command("git", "-C", root, "init", "--quiet").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
 	}
+	if err := os.WriteFile(filepath.Join(root, "input.txt"), []byte("synthetic"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CACHE_HOME", home)

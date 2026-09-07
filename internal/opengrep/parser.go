@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/sagolubev/secscan/internal/report"
 )
 
 type scanResult struct {
+	Paths struct {
+		Scanned []string `json:"scanned"`
+	} `json:"paths"`
 	Version string `json:"version"`
 	Results []struct {
 		CheckID string `json:"check_id"`
@@ -30,8 +34,9 @@ type scanResult struct {
 }
 
 type Parsed struct {
-	Version  string
-	Findings []report.Finding
+	ReadInputs []string
+	Version    string
+	Findings   []report.Finding
 }
 
 var ruleMessages = map[string]string{
@@ -56,6 +61,15 @@ func Parse(data []byte, language string) (Parsed, error) {
 	}
 
 	result := Parsed{Version: input.Version}
+	for _, path := range input.Paths.Scanned {
+		normalized, err := normalizeTargetPath(path)
+		if err != nil {
+			return Parsed{}, err
+		}
+		result.ReadInputs = append(result.ReadInputs, normalized)
+	}
+	slices.Sort(result.ReadInputs)
+	result.ReadInputs = slices.Compact(result.ReadInputs)
 	for _, item := range input.Results {
 		ruleID := normalizeRuleID(item.CheckID)
 		message, ok := ruleMessages[ruleID]

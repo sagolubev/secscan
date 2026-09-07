@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Compose CLI validation, isolated scanners and canonical output.
+// SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go
+// LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory
+// ROLE: SCRIPT
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// main - Own process cancellation and exit status.
+// run - Validate arguments and serialize one result.
+// scan - Compose prepared scanner jobs and inventory evidence.
+// buildReport - Preserve successful and partial results.
+// parseScannerSelection - Validate the finite scanner set.
+// gitRoot - Resolve the containing Git worktree.
+// END_MODULE_MAP
+
 package main
 
 import (
@@ -223,7 +240,7 @@ func scan(
 	needsRuntime := slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
 		slices.Contains(selection, "gradle-catalog") && len(scanner.NativeInputs("gradle-catalog", inventory.Native)) > 0 ||
 		slices.Contains(selection, "gradle-scripts") && len(scanner.NativeInputs("gradle-scripts", inventory.Native)) > 0 ||
-		slices.Contains(selection, "gitleaks") ||
+		slices.Contains(selection, "gitleaks") && len(inventory.Files) > 0 ||
 		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
 		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
 		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
@@ -271,7 +288,11 @@ func scan(
 	}
 	var gitleaksAsset scanner.Asset
 	var gitleaksErr error
-	if slices.Contains(selection, "gitleaks") {
+	if slices.Contains(selection, "gitleaks") && len(inventory.Files) == 0 {
+		skipped = append(skipped, report.Scanner{Name: "gitleaks", Status: "skipped", Coverage: report.Coverage{Unit: "repository"}})
+		emit(progress.Event{Scanner: "gitleaks", Stage: progress.StageSkipped, Status: progress.StatusSkipped})
+	}
+	if slices.Contains(selection, "gitleaks") && len(inventory.Files) > 0 {
 		if cacheErr != nil {
 			gitleaksErr = cacheErr
 		} else {
@@ -287,10 +308,21 @@ func scan(
 				if gitleaksErr != nil {
 					return report.Scanner{}, nil, gitleaksErr
 				}
-				result, err := gitleaks.Scan(ctx, runtime, root, emit, gitleaksAsset.ImageID)
+				target, err := discovery.Stage(root, inventory.Files)
 				if err != nil {
 					return report.Scanner{}, nil, err
 				}
+				defer os.RemoveAll(target)
+				result, err := gitleaks.Scan(ctx, runtime, target, emit, gitleaksAsset.ImageID)
+				if err != nil {
+					return report.Scanner{}, nil, err
+				}
+				for _, finding := range result.Findings {
+					if !slices.Contains(inventory.Files, finding.Path) {
+						return report.Scanner{}, nil, fmt.Errorf("Gitleaks reported a path outside selected inputs")
+					}
+				}
+				result.Scanners[0].Limitations = []string{"only Git-selected nonignored regular files are staged; symlinks and control files excluded", "Gitleaks reports repository-level completion, not per-file read evidence"}
 				return result.Scanners[0], result.Findings, nil
 			},
 		})
@@ -366,7 +398,7 @@ func scan(
 					return report.Scanner{}, nil, err
 				}
 				defer os.RemoveAll(target)
-				return opengrep.Scan(
+				result, findings, scanErr := opengrep.Scan(
 					ctx,
 					runtime,
 					imageID,
@@ -375,6 +407,22 @@ func scan(
 					len(language.files),
 					emit,
 				)
+				for _, path := range result.Coverage.ReadInputs {
+					if !slices.Contains(language.files, path) {
+						return report.Scanner{}, nil, fmt.Errorf("Opengrep reported an input outside selection")
+					}
+				}
+				for _, finding := range findings {
+					if !slices.Contains(language.files, finding.Path) {
+						return report.Scanner{}, nil, fmt.Errorf("Opengrep reported a finding outside selection")
+					}
+				}
+				for _, path := range language.files {
+					if !slices.Contains(result.Coverage.ReadInputs, path) {
+						result.Coverage.UnreadInputs = append(result.Coverage.UnreadInputs, path)
+					}
+				}
+				return result, findings, scanErr
 			},
 		})
 	}
@@ -477,7 +525,7 @@ func scan(
 	if result.Successes == 0 && len(selection) == 1 && selection[0] == "bearer" && len(skipped) == 0 {
 		runErr = fmt.Errorf("Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence: %w", orchestrator.ErrAllScannersFailed)
 	}
-	return buildReport(
+	output, err := buildReport(
 		root,
 		report.Exclusions{
 			IgnoredFiles: inventory.Ignored.Files,
@@ -487,6 +535,9 @@ func scan(
 		result,
 		runErr,
 	)
+	output.Inventory = &inventory.Traversal
+	output.UncheckedInputs = coverageGaps(inventory, selection, output.Scanners)
+	return output, err
 }
 
 func buildReport(
