@@ -43,11 +43,13 @@ import (
 	"github.com/sagolubev/secscan/internal/orchestrator"
 	"github.com/sagolubev/secscan/internal/progress"
 	"github.com/sagolubev/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/rules"
 	"github.com/sagolubev/secscan/internal/scanner"
 	"golang.org/x/term"
 )
 
 type scanOptions struct {
+	RulePack     *rules.Pack
 	Scanners     []string
 	Scopes       []string
 	TrivyReports bool
@@ -68,6 +70,9 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scanFunc) int {
+	if len(args) > 0 && args[0] == "rules" {
+		return runRules(ctx, args[1:], stdout, stderr)
+	}
 	updating := len(args) > 0 && args[0] == "update"
 	if updating {
 		args = args[1:]
@@ -78,6 +83,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	showLicenses := flags.Bool("licenses", false, "print project and third-party license notices")
 	scanImages := flags.Bool("scan-images", false, "authorize host runtime image pulls and offline archive scans")
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
+	rulePackID := flags.String("rule-pack", "", "add an explicitly imported rule pack by SHA-256 ID")
 	trivyReports := flags.String("trivy-reports", "", "write Trivy CycloneDX and SonarQube JSON to a new directory")
 	baselineInput := flags.String("baseline", "", "compare findings with a saved baseline")
 	baselineOutput := flags.String("write-baseline", "", "write unfiltered findings to a new baseline file")
@@ -141,8 +147,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	wantReports, readBaselineFlag, writeBaselineFlag := false, false, false
 	htmlFlag, sarifFlag := false, false
 	configFlag, noConfigFlag, severityFlag := false, false, false
+	rulePackFlag := false
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "rule-pack":
+			rulePackFlag = true
 		case "trivy-reports":
 			wantReports = true
 		case "baseline":
@@ -161,6 +170,22 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			severityFlag = true
 		}
 	})
+	var rulePack *rules.Pack
+	if rulePackFlag {
+		if updating || !rules.ValidID(*rulePackID) || !slices.Contains(selection, "semgrep") && !slices.Contains(selection, "python-sast") && !slices.Contains(selection, "typescript-sast") {
+			fmt.Fprintln(stderr, "--rule-pack requires a SHA-256 ID and a compatible SAST scanner; it cannot be used with update")
+			return 2
+		}
+		rulePack, err = loadRulePack(path, *rulePackID)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if !slices.Contains(selection, "semgrep") && !(slices.Contains(selection, "python-sast") && len(rulePack.Rules("python")) > 0) && !(slices.Contains(selection, "typescript-sast") && len(rulePack.Rules("typescript")) > 0) {
+			fmt.Fprintln(stderr, "rule pack has no rules for the selected language scanners")
+			return 2
+		}
+	}
 	if len(scopes) > 0 && (updating || readBaselineFlag || writeBaselineFlag) {
 		fmt.Fprintln(stderr, "--scope cannot be combined with update, --baseline or --write-baseline")
 		return 2
@@ -297,7 +322,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, Scopes: scopes, TrivyReports: wantReports, Excluded: controlPaths}, reporter.Emit)
+	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, Scopes: scopes, TrivyReports: wantReports, Excluded: controlPaths, RulePack: rulePack}, reporter.Emit)
 	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
 		fmt.Fprintln(stderr, scanErr)
@@ -405,7 +430,7 @@ func scan(
 		slices.Contains(selection, "zizmor") && len(scopedInventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
 		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0 ||
 		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0 ||
-		slices.Contains(selection, "semgrep") && len(scopedInventory.Python)+len(scopedInventory.TypeScript) > 0 ||
+		slices.Contains(selection, "semgrep") && len(inputsWithRules("semgrep", scopedInventory, options.RulePack)) > 0 ||
 		slices.Contains(selection, "bearer") && len(inventory.Bearer) > 0 ||
 		slices.Contains(selection, "cppcheck") && len(inventory.Cppcheck) > 0
 	var runtime container.Runtime
@@ -557,14 +582,15 @@ func scan(
 					return report.Scanner{}, nil, err
 				}
 				defer os.RemoveAll(target)
-				result, findings, scanErr := opengrep.Scan(
+				result, findings, scanErr := opengrep.ScanWithRules(
 					ctx,
 					runtime,
 					imageID,
 					language.name,
 					target,
-					len(language.files),
+					language.files,
 					emit,
+					options.RulePack,
 				)
 				for _, path := range result.Coverage.ReadInputs {
 					if !slices.Contains(language.files, path) {
@@ -594,7 +620,7 @@ func scan(
 		if fileScopedScanner(name) {
 			source = scopedInventory
 		}
-		files := inputsForScanner(name, source)
+		files := inputsWithRules(name, source, options.RulePack)
 		dependency := name == "trivy" || name == "grype" || name == "osv-scanner"
 		if len(files) == 0 || dependency && len(dependencyFiles) == 0 {
 			coverage := report.Coverage{Unit: "files"}
@@ -640,7 +666,7 @@ func scan(
 				return scanner.ScanIaC(ctx, runtime, cache, name, root, files, emit)
 			}
 			if name == "semgrep" || name == "bearer" || name == "cppcheck" {
-				return scanner.ScanCode(ctx, runtime, cache, name, root, files, emit)
+				return scanner.ScanCodeWithRules(ctx, runtime, cache, name, root, files, emit, options.RulePack)
 			}
 			return scanner.ScanCI(ctx, runtime, cache, name, root, files, emit)
 		}})
@@ -688,11 +714,11 @@ func scan(
 			if fileScopedScanner(output.Scanners[i].Name) {
 				source, mode = scopedInventory, "files"
 			}
-			output.Scanners[i].Scope = &report.ScannerScope{Mode: mode, CandidateFiles: len(inputsForScanner(output.Scanners[i].Name, source))}
+			output.Scanners[i].Scope = &report.ScannerScope{Mode: mode, CandidateFiles: len(inputsWithRules(output.Scanners[i].Name, source, options.RulePack))}
 		}
 		gapInventory = scopedCoverageInventory(inventory, scopedInventory, selection)
 	}
-	output.UncheckedInputs = coverageGaps(gapInventory, selection, output.Scanners)
+	output.UncheckedInputs = coverageGapsWithRules(gapInventory, selection, output.Scanners, options.RulePack)
 	return output, err
 }
 

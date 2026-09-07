@@ -1,3 +1,18 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Run prepared code scanners and preserve positive analysis evidence.
+// SCOPE: Stage only selected inputs; never run repository build files or fetch rules.
+// DEPENDS: internal/opengrep/parser.go, internal/opengrep/rules.go, internal/rules/pack.go
+// LINKS: cmd/secscan/rules_test.go#TestAcceptanceRulePacks
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// RuntimeArchitecture - Read the server architecture without assuming the host matches.
+// CodeArgs - Build isolated engine arguments with local rules.
+// ScanCode - Run a prepared built-in scanner.
+// ScanCodeWithRules - Add a verified pack to Semgrep and validate its full input evidence.
+// END_MODULE_MAP
+
 package scanner
 
 import (
@@ -17,6 +32,7 @@ import (
 	"github.com/sagolubev/secscan/internal/opengrep"
 	"github.com/sagolubev/secscan/internal/progress"
 	"github.com/sagolubev/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/rules"
 	ruleassets "github.com/sagolubev/secscan/scanner/opengrep/assets"
 )
 
@@ -68,7 +84,7 @@ func CodeArgs(name, imageID, target, output, rules string, files ...string) []st
 	args = append(args, imageID)
 	switch name {
 	case "semgrep":
-		return append(args, "semgrep", "scan", "--json", "--quiet", "--config", "/rules", "--metrics", "off", "--disable-version-check", "--no-git-ignore", "/target")
+		return append(args, "semgrep", "scan", "--json", "--quiet", "--config", "/rules", "--metrics", "off", "--disable-version-check", "--no-git-ignore", "--no-rewrite-rule-ids", "/target")
 	case "bearer":
 		return append(args, "scan", "/target", "--scanner", "sast", "--report", "security", "--format", "sarif", "--output", "/out/result.sarif", "--exit-code", "0", "--config-file", "/dev/null", "--ignore-file=", "--disable-default-rules", "--external-rule-dir", "/rules", "--disable-version-check", "--disable-domain-resolution", "--quiet", "--hide-progress-bar", "--no-color", "--no-extract")
 	case "cppcheck":
@@ -84,6 +100,11 @@ func CodeArgs(name, imageID, target, output, rules string, files ...string) []st
 
 // ScanCode stages only source candidates and never executes project build files.
 func ScanCode(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, files []string, emit func(progress.Event)) (report.Scanner, []report.Finding, error) {
+	return ScanCodeWithRules(ctx, runtime, cache, name, root, files, emit, nil)
+}
+
+// ScanCodeWithRules adds a verified custom pack only to the Semgrep persona.
+func ScanCodeWithRules(ctx context.Context, runtime container.Runtime, cache Cache, name, root string, files []string, emit func(progress.Event), pack *rules.Pack) (report.Scanner, []report.Finding, error) {
 	if name == "bearer" {
 		arch, err := RuntimeArchitecture(ctx, runtime)
 		if err != nil {
@@ -114,6 +135,11 @@ func ScanCode(ctx context.Context, runtime container.Runtime, cache Cache, name,
 		if err := writeCodeRules(rules); err != nil {
 			return report.Scanner{}, nil, err
 		}
+		if pack != nil {
+			if err := pack.WriteForPaths(rules, "", files); err != nil {
+				return report.Scanner{}, nil, err
+			}
+		}
 	} else if name == "bearer" {
 		if err := extractBearerRules(filepath.Join(cache.Root, asset.Static["rules"].Path), rules); err != nil {
 			return report.Scanner{}, nil, err
@@ -133,7 +159,7 @@ func ScanCode(ctx context.Context, runtime container.Runtime, cache Cache, name,
 	emit(progress.Event{Scanner: name, Stage: progress.StageReading, Status: progress.StatusRunning, Files: len(files)})
 	var findings []report.Finding
 	if name == "semgrep" {
-		parsed, parseErr := opengrep.Parse(data, "")
+		parsed, parseErr := opengrep.ParseWithRules(data, "", pack)
 		var input struct {
 			Results []json.RawMessage `json:"results"`
 			Errors  []json.RawMessage `json:"errors"`
@@ -172,8 +198,7 @@ func ScanCode(ctx context.Context, runtime container.Runtime, cache Cache, name,
 	}
 	result := report.Scanner{Name: name, Status: "success", Image: asset.ImageID, EngineVersion: Catalog()[name].Version, Coverage: coverage, Limitations: []string{"only Git-selected source candidates staged; repository configuration and project builds excluded"}}
 	if name == "semgrep" {
-		result.RulePackDigest = opengrep.RulePackDigest
-		result.RuleCount = opengrep.RuleCount
+		result.RulePackDigest, result.RuleCount, result.CustomRulePack = opengrep.RuleEvidence("", pack)
 	}
 	if name == "cppcheck" {
 		result.Limitations = append(result.Limitations, "default Cppcheck language/platform settings; external headers, project compiler flags and addons excluded")

@@ -90,6 +90,13 @@ workflow changes do not change the released secscan scan contract.
 
 ## Capabilities
 
+The approved next sequence is private offline rule packs, Git-history secrets,
+runtime architecture disclosure, real rootless/Podman coverage, and deterministic
+report budgets. LLM annotations remain deferred by the user's decision. Each
+feature has its own preimplementation baseline, immutable verification plan and
+independent review. The rule-pack outcome is its own vertical skeleton: local
+import, content-addressed storage, isolated native scan and sanitized report.
+
 ### New Capabilities
 
 - `scanner-orchestration`: безопасный параллельный запуск scanner containers.

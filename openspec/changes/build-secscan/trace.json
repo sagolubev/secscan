@@ -3,18 +3,16 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.29",
-  "baselineCommit": "86df32baf0bb229548d7db77469df984a87b1a60",
+  "targetOutcome": "secscan-ij8.23",
+  "baselineCommit": "500d780788edbffe7d2d76650c461d962e22bda7",
   "scope": {
     "implementation": [
-      "internal/tracecheck/",
-      "cmd/tracecheck/",
+      "internal/rules/",
+      "internal/opengrep/",
+      "internal/scanner/code.go",
+      "internal/scanner/code_test.go",
       "cmd/secscan/",
-      "internal/container/cancellation_test.go",
-      "internal/discovery/discovery_test.go",
-      "internal/report/baseline.go",
-      "internal/report/report_test.go",
-      ".github/workflows/ci.yml"
+      "internal/report/"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -22,11 +20,7 @@
       "openspec/changes/build-secscan/specs/secscan/spec.md",
       "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/.stale.json",
-      "AGENTS.md",
-      "README.md",
-      "docs/grace-integration.md",
-      "docs/grace-pilot.md",
-      "docs/code-navigation.md"
+      "README.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -342,8 +336,19 @@
     {
       "requirement": "Reproducibility",
       "scenario": "Cached rules",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.23"
+      "disposition": "target",
+      "components": [
+        "internal/rules/pack.go",
+        "internal/rules/store.go",
+        "internal/scanner/code.go",
+        "internal/opengrep/scan.go",
+        "cmd/secscan/rules.go"
+      ],
+      "tests": [
+        "internal/rules/pack_test.go",
+        "internal/rules/store_test.go",
+        "cmd/secscan/rules_test.go"
+      ]
     },
     {
       "requirement": "Reproducibility",
@@ -1237,6 +1242,74 @@
         "internal/tracecheck/navigation_test.go",
         "cmd/tracecheck/main_test.go"
       ]
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Explicit rule import",
+      "disposition": "target",
+      "components": [
+        "internal/rules/pack.go",
+        "internal/rules/store.go",
+        "internal/opengrep/parser.go",
+        "internal/scanner/code.go",
+        "cmd/secscan/rules.go"
+      ],
+      "tests": [
+        "internal/rules/pack_test.go",
+        "internal/rules/store_test.go",
+        "cmd/secscan/rules_test.go"
+      ]
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Rule pack boundary",
+      "disposition": "target",
+      "components": [
+        "internal/rules/pack.go",
+        "internal/rules/store.go",
+        "internal/opengrep/parser.go",
+        "internal/scanner/code.go",
+        "cmd/secscan/rules.go"
+      ],
+      "tests": [
+        "internal/rules/pack_test.go",
+        "internal/rules/store_test.go",
+        "cmd/secscan/rules_test.go"
+      ]
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Additional rule execution",
+      "disposition": "target",
+      "components": [
+        "internal/rules/pack.go",
+        "internal/rules/store.go",
+        "internal/opengrep/parser.go",
+        "internal/scanner/code.go",
+        "cmd/secscan/rules.go"
+      ],
+      "tests": [
+        "internal/rules/pack_test.go",
+        "internal/rules/store_test.go",
+        "cmd/secscan/rules_test.go"
+      ]
+    },
+    {
+      "requirement": "Reproducibility",
+      "scenario": "Rule pack rollback",
+      "disposition": "target",
+      "components": [
+        "internal/rules/pack.go",
+        "internal/rules/store.go",
+        "internal/opengrep/parser.go",
+        "internal/scanner/code.go",
+        "cmd/secscan/rules.go"
+      ],
+      "tests": [
+        "internal/rules/pack_test.go",
+        "internal/rules/store_test.go",
+        "cmd/secscan/rules_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1259,24 +1332,30 @@
         ]
       },
       {
-        "name": "tracecheck-tests",
+        "name": "existing-sast-cli",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/tracecheck"
+          "./internal/opengrep",
+          "./internal/scanner",
+          "./cmd/secscan",
+          "-count=1"
         ]
       }
     ],
     "target": [
       {
-        "name": "verifier-focused",
+        "name": "rule-packs-focused",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/tracecheck",
-          "./cmd/tracecheck",
+          "./internal/rules",
+          "./internal/opengrep",
+          "./internal/scanner",
+          "./cmd/secscan",
+          "./internal/report",
           "-count=1"
         ]
       }

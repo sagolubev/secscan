@@ -8,6 +8,7 @@
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
 // coverageGaps - Compare supported input routes with selected scanner read evidence.
+// coverageGapsWithRules - Include explicit custom-language routes in coverage gaps.
 // END_MODULE_MAP
 
 package main
@@ -18,10 +19,15 @@ import (
 
 	"github.com/sagolubev/secscan/internal/discovery"
 	"github.com/sagolubev/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/rules"
 	"github.com/sagolubev/secscan/internal/scanner"
 )
 
 func coverageGaps(inventory discovery.Inventory, selection []string, results []report.Scanner) []report.UncheckedInput {
+	return coverageGapsWithRules(inventory, selection, results, nil)
+}
+
+func coverageGapsWithRules(inventory discovery.Inventory, selection []string, results []report.Scanner, pack *rules.Pack) []report.UncheckedInput {
 	codeRoutes := map[string][]string{}
 	dependencyRoutes := map[string][]string{}
 	for _, route := range []struct {
@@ -29,7 +35,7 @@ func coverageGaps(inventory discovery.Inventory, selection []string, results []r
 		files []string
 	}{
 		{"python-sast", inventory.Python}, {"typescript-sast", inventory.TypeScript},
-		{"semgrep", inventory.Python}, {"semgrep", inventory.TypeScript},
+		{"semgrep", inputsWithRules("semgrep", inventory, pack)},
 		{"bearer", inventory.Bearer}, {"cppcheck", inventory.Cppcheck},
 	} {
 		for _, file := range route.files {

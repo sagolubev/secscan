@@ -65,6 +65,7 @@ type Image struct {
 }
 
 type Scanner struct {
+	CustomRulePack *RulePack     `json:"customRulePack,omitempty"`
 	Scope          *ScannerScope `json:"scope,omitempty"`
 	TrivyReports   *TrivyReports `json:"-"`
 	Engines        []Engine      `json:"engines,omitempty"`

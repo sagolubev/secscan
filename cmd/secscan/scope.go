@@ -11,6 +11,7 @@
 // fileScopedScanner - Identify the finite set of scanners with safe file narrowing.
 // inputsForScanner - Map a persona to its candidate inputs for execution and disclosure.
 // scopedCoverageInventory - Preserve gaps relevant to scoped and full-context scanners.
+// inputsWithRules - Add only matching custom-rule source inputs.
 // END_MODULE_MAP
 
 package main
@@ -21,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/sagolubev/secscan/internal/discovery"
+	"github.com/sagolubev/secscan/internal/rules"
 	"github.com/sagolubev/secscan/internal/scanner"
 )
 
@@ -74,6 +76,21 @@ func inputsForScanner(name string, inventory discovery.Inventory) []string {
 	default:
 		return nil
 	}
+}
+
+func inputsWithRules(name string, inventory discovery.Inventory, pack *rules.Pack) []string {
+	files := inputsForScanner(name, inventory)
+	if name != "semgrep" || pack == nil {
+		return files
+	}
+	files = append([]string(nil), files...)
+	for _, source := range inventory.Sources {
+		if pack.MatchesPath(source.Path) {
+			files = append(files, source.Path)
+		}
+	}
+	slices.Sort(files)
+	return slices.Compact(files)
 }
 
 // Coverage needs both the broad input list and its scanner routes; restoring

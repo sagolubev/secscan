@@ -158,6 +158,69 @@ Secscan экспортирует их для Trivy и Grype, но не запу�
 После проверки он удаляет только образы, которые загрузил сам.
 Уже существовавшие образы сохраняются.
 
+## Дополнительные правила
+
+Эти команды доступны в сборке из текущих исходников и войдут в следующий
+бинарный релиз. Пакет выбирается явно; secscan не загружает его из сети.
+
+Создайте каталог с `rules.toml`, YAML-правилами и текстом их лицензии.
+Пример `rules.toml` для собственных правил:
+
+```toml
+version = 1
+source = "local"
+license = "MIT"
+license_file = "LICENSE"
+files = ["custom.yml"]
+```
+
+Для внешних правил укажите в `source` HTTPS-адрес без credentials, query и
+fragment; необязательный `revision` хранит полный commit SHA. Secscan сохраняет
+заявленную лицензию и её текст. Право использования проверяет владелец пакета.
+
+Пример `custom.yml`:
+
+```yaml
+rules:
+  - id: python-unsafe-pickle
+    languages: [python]
+    message: Untrusted pickle deserialization
+    severity: ERROR
+    pattern: pickle.loads($VALUE)
+```
+
+Импортируйте каталог и скопируйте поле `id` из JSON-ответа:
+
+```sh
+secscan rules import /path/to/my-rules
+secscan rules show <id>
+secscan --rule-pack <id> --scanners python-sast,semgrep /path/to/repository
+```
+
+ID — SHA-256 всего пакета, включая источник, лицензию и точные YAML bytes.
+Повторный импорт тех же данных возвращает тот же ID. Scan проверяет кэш и
+материализует собственную копию правил; сеть контейнеров выключена.
+Для возврата к прежним правилам выберите старый ID или уберите `--rule-pack`.
+Встроенные правила сохраняются. `--rule-pack` недоступен для `update`.
+
+Пакеты работают с Semgrep и отдельными Python/TypeScript jobs. Для Semgrep
+добавляются исходники языков, явно указанных в пакете; `--scope` также применяется.
+Допустимые language tags: `python`, `javascript`, `typescript`, `go`, `java`,
+`ruby`, `php`, `c`, `cpp`, `csharp`, `kotlin`, `rust`, `swift`, `scala`, `lua`,
+`bash`, `html`, `css`. Алиасы и `generic` не принимаются. Полную совместимость
+DSL проверяет выбранный движок при scan; ошибочные правила не пропускаются молча.
+
+В `scanners[].customRulePack` записаны ID, source, license, revision и число
+custom rules. `rulePackDigest` описывает выбранный набор, `ruleCount` включает
+встроенные правила. Эти сведения также сохраняются в HTML и SARIF.
+Custom finding IDs содержат полный pack ID. Динамические messages и metavariables
+не выводятся: сообщение находки — `custom rule matched`.
+
+Limits: 256 YAML files, 4096 rules, 2 MiB на файл и 16 MiB на пакет;
+manifest и license — до 64 KiB каждый. Symlinks, duplicate keys/IDs, YAML aliases,
+remote includes и executable validators отклоняются. Кэш должен находиться
+вне сканируемого репозитория. Наборы сторонних правил не входят в бинарник.
+
 ## Отдельные файлы и каталоги
 
 `--scope` выбирает файл или каталог относительно корня Git-репозитория:
@@ -414,7 +477,7 @@ Config должен быть обычным UTF-8 файлом размером 
 
 ## Что пока ограничено
 
-Python, TypeScript и Semgrep используют один собственный набор из восьми правил.
+По умолчанию Python, TypeScript и Semgrep используют собственный набор из восьми правил.
 Это не полный набор правил Semgrep. Bearer работает только на native amd64.
 Его результат подтверждает чтение лишь файлов с находками. Остальные остаются
 непрочитанными в отчёте. Cppcheck проверяет C/C++ без сборки проекта.
@@ -424,7 +487,7 @@ Gradle-проверки читают статические координаты
 но не проверяет доступность новых версий. GitLab includes не загружаются.
 Gitleaks проверяет рабочее дерево, а не историю Git.
 
-Пока нет LLM-анализа, token budget и пользовательских пакетов правил. Podman и rootless остаются
+Пока нет LLM-анализа и token budget. Podman и rootless остаются
 непроверенными режимами. [Историческое сравнение с DietSec](docs/feature-status.md)
 описывает commit `c406ed3` от 6 сентября 2026 года. Текущие возможности описаны
 выше, актуальный остаток требований и задачи находятся в OpenSpec и Beads.

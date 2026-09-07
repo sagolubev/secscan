@@ -1,3 +1,17 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Normalize only registered findings and discard dynamic scanner text.
+// SCOPE: Validate paths, rule languages and locations; preserve built-in fingerprints.
+// DEPENDS: internal/rules/pack.go, internal/report/report.go
+// LINKS: internal/opengrep/rules_test.go#TestCustomRuleParserUsesRegisteredMetadata
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Parsed - Sanitized findings and positive input evidence.
+// Parse - Normalize the built-in rule set.
+// ParseWithRules - Normalize explicitly registered custom rules without copying messages.
+// END_MODULE_MAP
+
 package opengrep
 
 import (
@@ -9,7 +23,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/sagolubev/secscan/internal/discovery"
 	"github.com/sagolubev/secscan/internal/report"
+	"github.com/sagolubev/secscan/internal/rules"
 )
 
 type scanResult struct {
@@ -52,6 +68,22 @@ var ruleMessages = map[string]string{
 
 // Parse normalizes the shared rule pack. An empty language derives it from the rule.
 func Parse(data []byte, language string) (Parsed, error) {
+	return ParseWithRules(data, language, nil)
+}
+
+// ParseWithRules recognizes only registered IDs and discards all dynamic messages.
+func ParseWithRules(data []byte, language string, pack *rules.Pack) (Parsed, error) {
+	custom := map[string]rules.Rule{}
+	packID := ""
+	if pack != nil {
+		packID = pack.Metadata().ID
+		if !rules.ValidID(packID) {
+			return Parsed{}, fmt.Errorf("invalid custom rule pack")
+		}
+		for _, rule := range pack.Rules(language) {
+			custom[rule.ID] = rule
+		}
+	}
 	var input scanResult
 	if err := json.Unmarshal(data, &input); err != nil {
 		return Parsed{}, fmt.Errorf("decode Opengrep report: %w", err)
@@ -73,16 +105,27 @@ func Parse(data []byte, language string) (Parsed, error) {
 	for _, item := range input.Results {
 		ruleID := normalizeRuleID(item.CheckID)
 		message, ok := ruleMessages[ruleID]
-		if !ok {
-			return Parsed{}, fmt.Errorf("unknown Opengrep rule %q", ruleID)
-		}
 		filePath, err := normalizeTargetPath(item.Path)
 		if err != nil {
 			return Parsed{}, err
 		}
 		findingLanguage := language
-		if findingLanguage == "" {
+		severity := strings.ToLower(item.Extra.Severity)
+		if rule, exists := custom[item.CheckID]; exists {
+			if !rule.MatchesPath(filePath) {
+				return Parsed{}, fmt.Errorf("custom rule finding has an incompatible source path")
+			}
+			ruleID = "secscan.custom." + packID + "." + rule.ID
+			message = "custom rule matched"
+			severity = rule.Severity
+			findingLanguage = discovery.SourceLanguage(filePath)
+		} else if !ok {
+			return Parsed{}, fmt.Errorf("unknown Opengrep rule")
+		} else if findingLanguage == "" {
 			findingLanguage = strings.Split(ruleID, ".")[1]
+		}
+		if item.Start.Line < 1 || item.End.Line < item.Start.Line {
+			return Parsed{}, fmt.Errorf("invalid Opengrep finding location")
 		}
 		sum := sha256.Sum256([]byte(fmt.Sprintf(
 			"%s\x00%s\x00%s\x00%d\x00%d",
@@ -103,7 +146,7 @@ func Parse(data []byte, language string) (Parsed, error) {
 			Sources:     []string{"opengrep"},
 			Origin:      "working_tree",
 			Language:    findingLanguage,
-			Severity:    strings.ToLower(item.Extra.Severity),
+			Severity:    severity,
 		})
 	}
 	return result, nil

@@ -861,3 +861,67 @@ manifest substitution and mutation, late baseline, missing/stale/tampered chains
 Beads round-trip persistence, fake task/test references, missing/stale code maps
 and all-skipped tests. Existing source and container gates remain. Rollback is an
 explicit corrective commit; never silently weaken the guards or rewrite evidence.
+
+
+## Private offline rule packs
+
+Feature profile, Standard artifacts, Comprehensive verification. Outcome .23
+is one vertical skeleton on the existing prepared engine/container boundary.
+Reuse installed go-toml/v2 and yaml/v3; the local Opengrep card and pinned engine
+help confirm local YAML configs and --no-rewrite-rule-ids. Do not use --validate,
+which may fetch registry lint rules. Import checks the safe bundle grammar;
+the chosen engine checks its full rule DSL during an ordinary offline scan.
+
+Add `secscan rules import DIR` and `secscan rules show ID`, both returning JSON.
+DIR/rules.toml has version=1, source, license, license_file and files; optional
+revision records a full commit SHA. Source is `local` or HTTPS without credentials,
+query or fragment. The license identifier/expression is a declaration, not legal
+approval. Retain its nonempty UTF-8 license file in the private cache; no rule
+corpus is embedded in binaries or automatically downloaded/redistributed.
+
+The manifest explicitly selects at most 256 relative YAML files. Reject escaping
+paths, symlinks/nonregular inputs, duplicate fields/files/rule IDs, aliases,
+merge keys, nonstandard tags, executable validators and remote includes. Bound
+manifest/license to 64 KiB each, a rule file to 2 MiB, the canonical bundle to
+16 MiB and total rules to 4096. Rules require bounded identifiers, supported
+source-language tags and ERROR/WARNING/INFO severity. Reserve secscan.* IDs for
+built-ins. Semantic DSL errors remain operational failures, never clean scans.
+
+A small internal/rules package stores one canonical JSON bundle per SHA-256 ID
+under the existing user cache's prepared/rule-packs directory. Sort file entries;
+identity covers version, provenance, license bytes and exact YAML bytes. The
+payload contains no acquisition time or absolute input path. Load verifies ID,
+canonical encoding and the same grammar before returning an immutable Pack.
+Use private temporary files and no-clobber publication; existing IDs are verified,
+not overwritten. Snapshot validated bytes in memory, then materialize only YAML
+into owned temporary scanner directories. This avoids mutable cache mounts and
+keeps credentials/license files outside scanner inputs.
+
+`--rule-pack ID` is an explicit scan option, not repository configuration. It
+requires Semgrep, python-sast or typescript-sast in the selection, rejects update
+and malformed IDs, and loads the bundle before scanning. Default execution is
+unchanged. Semgrep adds applicable known source inputs from discovery; Python
+and TypeScript jobs use their existing language inputs and matching rules only.
+One input helper serves execution, runtime need, scopes and coverage accounting.
+Reject unsupported language tags rather than claiming that ignored rules ran.
+
+Retain built-in rules and their IDs/fingerprints. Disable engine ID rewriting;
+recognize custom output IDs only from the loaded pack. Canonical custom rule IDs
+include the full pack ID to separate versions. Emit static `custom rule matched`
+messages, validated paths/lines and declared severity; discard arbitrary engine
+messages, snippets, metavariables and raw errors. Report custom pack provenance
+and counts separately, plus a deterministic effective rule-pack digest. Shared
+Semgrep/Opengrep findings for the same pack/rule/location can still merge.
+
+Verify CLI usage/rollback, deterministic reimport, tampering, hostile files/YAML,
+failed publication, input immutability, scope routing and unchanged built-ins.
+Real acceptance imports synthetic rules, runs prepared Semgrep and Opengrep with
+network disabled, and checks custom findings, positive reads and redaction.
+Existing full source/native checks, GRACE maps and independent security review
+remain required. Rollback selects an earlier ID, omits the flag or reverts the
+additive commit; no previous cache entry or user report is removed.
+
+Least confident: third-party rule DSL support differs between the two pinned
+engines. Import does not promise that every rule is compatible with both;
+engine parse failures are explicit. A mismatch must not be fixed by skipping
+invalid rules or weakening read-evidence checks.

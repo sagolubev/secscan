@@ -288,6 +288,29 @@
 - **THEN** тот же cache ID обозначает одинаковые canonical rule bytes
 - **AND** scan может использовать их без сети
 
+#### Scenario: Explicit rule import
+- **WHEN** пользователь выполняет `secscan rules import DIR`
+- **THEN** локальный `rules.toml` явно перечисляет YAML files, source и license file
+- **AND** source/license provenance и точные rule bytes сохраняются в private content-addressed cache без network access
+- **AND** повторный импорт одинакового canonical bundle возвращает тот же SHA-256 ID; сбой не заменяет сохранённые пакеты
+
+#### Scenario: Rule pack boundary
+- **WHEN** manifest, license, rule files или cached bundle недопустимы, превышают limits, содержат symlinks или не совпадают с ID
+- **THEN** операция завершается ошибкой до запуска scanners и не раскрывает содержимое входных файлов
+- **AND** duplicate rule IDs, ambiguous YAML, remote includes и executable validators не принимаются
+
+#### Scenario: Additional rule execution
+- **WHEN** scan получает `--rule-pack ID` с выбранным Semgrep или Python/TypeScript persona
+- **THEN** applicable cached rules дополняют built-in rules через read-only temporary rule input
+- **AND** фактический pack ID, declared source/license и applied rule count доступны в report
+- **AND** scoped inputs и positive read evidence учитывают выбранные rules; rule messages и metavariable values не попадают в report
+- **AND** флаг с пустым ID, для update или без совместимого scanner возвращает usage error
+
+#### Scenario: Rule pack rollback
+- **WHEN** выбран прежний ID или `--rule-pack` отсутствует
+- **THEN** используется прежний immutable bundle или исходный built-in набор соответственно
+- **AND** default findings, filters, baselines и полные exports сохраняют свой контракт
+
 #### Scenario: Pinned feeds
 - **WHEN** пользователь включает pinned advisory feeds
 - **THEN** Trivy и Grype используют уже загруженные local databases
