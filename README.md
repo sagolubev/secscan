@@ -463,19 +463,34 @@ macOS, контейнерные тесты на Linux amd64/arm64 и сборк�
 Перед изменением прочитайте [AGENTS.md](AGENTS.md), связанную задачу и design.
 В ключевых Go-файлах есть GRACE contract/map: назначение, ограничения, символы
 и ссылки на тесты. [Правила навигации](docs/code-navigation.md) объясняют разметку.
-Для нового поведения сначала получите падающий тест, затем внесите изменение.
-До реализации задайте в [trace.json](openspec/changes/build-secscan/trace.json)
-задачу `targetOutcome`, исходный `baselineCommit` и ожидаемые файлы `scope`.
-Поддерживайте ссылки requirement → component → test и проверяйте их:
+До реализации, включая новые тесты, задайте в
+[trace.json](openspec/changes/build-secscan/trace.json) задачу `targetOutcome`,
+полный исходный commit SHA в `baselineCommit`, ожидаемые файлы `scope` и checks.
+Поддерживайте ссылки requirement → component → test. Снимите исходный baseline:
 
 ```sh
 openspec validate --all --strict
-go run ./cmd/tracecheck --validate-only
-br list --all
+go run ./cmd/tracecheck --phase baseline --run
 ```
 
-`--validate-only` проверяет ссылки, scope, состояние требований и задач.
-Он не запускает сценарии и не доказывает выполнение всех требований.
+Затем получите падающий тест, внесите изменение и проведите независимое review.
+Добавьте проверенные файлы в index через `git add` и выполните:
+
+```sh
+go run ./cmd/tracecheck --phase target --run
+go run ./cmd/tracecheck --phase final --run
+go run ./cmd/tracecheck --verify-evidence
+```
+
+Каждая фаза сохраняет полный результат в Beads. Последняя команда проверяет
+сохранённую цепочку и её соответствие текущему коду; сканеры повторно не запускает.
+Перед закрытием задачи через `br close` эта проверка должна пройти.
+Manifest и команды остаются теми же между фазами. Новый scope или набор checks
+требует нового спланированного outcome.
+
+Для быстрой сверки используйте `go run ./cmd/tracecheck --validate-only`.
+Он проверяет ссылки, Go-карты, полный diff, состояние требований и задач.
+Он не запускает сценарии и не заменяет фазовый evidence.
 Поле `target` означает наличие связи с кодом и тестом, `deferred` — отложенный
 сценарий. Независимое review проверяет смысл этих связей.
 
@@ -489,8 +504,11 @@ jq -r '.traces[] | select(.disposition == "deferred") |
 
 Команды фаз `baseline`, `target` и `final` заданы в `trace.json`.
 Для полного запуска фаз дополнительно нужны `actionlint` и `opsx-stale` из
-принятого workflow. Evidence хранится в Beads. Перед закрытием задачи
-сопоставьте её требования, фактический diff, результаты тестов и review.
+принятого workflow. `br sync --flush-only` сохраняет комментарии с evidence
+в `.beads/issues.jsonl` для commit. CI проверяет сохранённую цепочку, разметку,
+экспорт/импорт Beads и запускает свежие тесты. Старые legacy-записи не заменяют
+новый baseline. Ограничения Git и порядок фаз описаны в
+[руководстве GRACE](docs/grace-integration.md).
 
 [Оценка пилота GRACE](docs/grace-pilot.md) описывает опыт проекта.
 [Разбор исходного GRACE](docs/grace-integration.md) объясняет, что можно

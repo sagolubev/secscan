@@ -54,8 +54,12 @@ jobs:
       - run: .github/scripts/install-tools.sh
       - run: openspec validate --all --strict
       - run: actionlint .github/workflows/ci.yml .github/workflows/release.yml
-      - name: Validate trace, scope, authority and staleness
+      - name: Validate trace, scope, source maps, authority and staleness
         run: go run ./cmd/tracecheck --validate-only > "$RUNNER_TEMP/trace-validation.json"
+      - name: Verify the saved phase chain against this checkout
+        run: go run ./cmd/tracecheck --verify-evidence > "$RUNNER_TEMP/trace-evidence.json"
+      - name: Test evidence export and import through Beads
+        run: go test ./internal/tracecheck -run '^TestEvidenceBeadsRoundTrip$' -count=1
       - name: Check complete Git history for secrets
         run: |
           image=ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
@@ -68,7 +72,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trace-validation
-          path: ${{ runner.temp }}/trace-validation.json
+          path: |
+            ${{ runner.temp }}/trace-validation.json
+            ${{ runner.temp }}/trace-evidence.json
           if-no-files-found: error
 
   acceptance:

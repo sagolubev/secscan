@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify baseline comparison, output ownership and old-text isolation.
+// SCOPE: Synthetic reports plus opt-in container acceptance.
+// DEPENDS: cmd/secscan/baseline.go, cmd/secscan/output.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-baselines
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestRunWritesAndComparesBaseline - Keep only current growth after loading a snapshot.
+// TestBaselineArgumentAndDataFailures - Reject invalid controls before starting scanners.
+// TestBaselinePublicationFailuresPreserveData - Preserve existing files and remove incomplete outputs.
+// TestBaselineKeepsTrivyExportsUnfiltered - Keep integration exports independent of baseline filtering.
+// TestBaselinePinsOutputParent - Prevent publication through a replaced parent directory.
+// TestAcceptanceBaselineCompare - Check real scanning and isolation from old snapshot text.
+// END_MODULE_MAP
+
 package main
 
 import (

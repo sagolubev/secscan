@@ -3,12 +3,18 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.28",
-  "baselineCommit": "7decbfc85dbc5bd783702e015c5ab839cea09c51",
+  "targetOutcome": "secscan-ij8.29",
+  "baselineCommit": "86df32baf0bb229548d7db77469df984a87b1a60",
   "scope": {
     "implementation": [
       "internal/tracecheck/",
-      "cmd/tracecheck/"
+      "cmd/tracecheck/",
+      "cmd/secscan/",
+      "internal/container/cancellation_test.go",
+      "internal/discovery/discovery_test.go",
+      "internal/report/baseline.go",
+      "internal/report/report_test.go",
+      ".github/workflows/ci.yml"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -16,7 +22,11 @@
       "openspec/changes/build-secscan/specs/secscan/spec.md",
       "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/.stale.json",
-      "docs/grace-integration.md"
+      "AGENTS.md",
+      "README.md",
+      "docs/grace-integration.md",
+      "docs/grace-pilot.md",
+      "docs/code-navigation.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -1217,8 +1227,16 @@
     {
       "requirement": "Source navigation comments",
       "scenario": "Automated markup checks",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.29"
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/navigation.go",
+        "cmd/tracecheck/main.go",
+        ".github/workflows/ci.yml"
+      ],
+      "tests": [
+        "internal/tracecheck/navigation_test.go",
+        "cmd/tracecheck/main_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1245,6 +1263,7 @@
         "argv": [
           "go",
           "test",
+          "-json",
           "./internal/tracecheck"
         ]
       }
@@ -1334,6 +1353,14 @@
         "argv": [
           "python3",
           ".github/scripts/test-installer.py"
+        ]
+      },
+      {
+        "name": "workflow-lint",
+        "argv": [
+          "actionlint",
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml"
         ]
       }
     ]

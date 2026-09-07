@@ -12,6 +12,7 @@
 // TestTaggedCommentsFailClosedAndIgnoreLegacy - Separate new evidence from historical data.
 // TestValidationBindsLoadedManifest - Different loaded check sets cannot share identity.
 // TestValidationRejectsUnresolvedDeferredIssue - Unknown deferred work fails validation.
+// TestValidationRejectsInvalidNavigation - Invalid source metadata blocks every CLI validation mode.
 // TestPhaseRejectsMutationDuringChecks - Code, authority and manifest edits invalidate runs.
 // TestPhaseRejectsLateBaselineAndUnstagedTarget - Invalid phase state blocks commands.
 // END_MODULE_MAP
@@ -102,6 +103,33 @@ func TestValidationRejectsUnresolvedDeferredIssue(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"--manifest", path, "--validate-only"}, &stdout, &stderr); code != 1 {
 		t.Errorf("unresolved deferred issue exit=%d; want 1", code)
+	}
+}
+
+func TestValidationRejectsInvalidNavigation(t *testing.T) {
+	for _, mode := range [][]string{{"--validate-only"}, {"--verify-evidence"}, {"--phase", "baseline", "--run"}, {"--phase", "target", "--run"}} {
+		t.Run(strings.Join(mode, " "), func(t *testing.T) {
+			root, path := traceFixture(t)
+			writeFixture(t, filepath.Join(root, "internal/example/source.go"), []byte("// START_MODULE_MAP\n// Missing - Does not exist.\n// END_MODULE_MAP\npackage example\n"))
+			m, err := tracecheck.LoadManifest(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Scope.Implementation = append(m.Scope.Implementation, "internal/example/source.go")
+			data, err := json.Marshal(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFixture(t, path, data)
+			var stdout, stderr bytes.Buffer
+			args := append([]string{"--manifest", path}, mode...)
+			if code := run(args, &stdout, &stderr); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "navigation") {
+				t.Errorf("run(%q) exit=%d stdout=%s stderr=%s; want navigation rejection", args, code, &stdout, &stderr)
+			}
+			if _, err := os.Stat(filepath.Join(root, "ran-check")); !os.IsNotExist(err) {
+				t.Errorf("invalid navigation ran phase checks: %v", err)
+			}
+		})
 	}
 }
 

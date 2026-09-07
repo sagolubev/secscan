@@ -1,3 +1,15 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify cancellation removes the running container.
+// SCOPE: Measure cancellation after readiness, including a delayed cold start.
+// DEPENDS: internal/container/runtime.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-container-runtime
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestAcceptanceCancellation - Check all runtime entrypoints and container cleanup.
+// END_MODULE_MAP
+
 package container_test
 
 import (

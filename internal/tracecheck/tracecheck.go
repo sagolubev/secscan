@@ -4,9 +4,17 @@
 // DEPENDS: internal/tracecheck/git.go
 // LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
 // ROLE: RUNTIME
-// MAP_MODE: LOCALS
+// MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
+// ScenarioRef - Identify one scenario within a requirement.
+// Trace - Link a scenario to code and tests or deferred work.
+// Scope - Declare implementation, governance and evidence paths.
+// Check - Declare an argument-vector command and output constraint.
+// Manifest - Bind the selected outcome, scope and verification plan.
+// Change - Preserve both paths of a Git rename.
+// LoadManifest - Decode a strict standalone manifest document.
+// ParseScenarios - Extract the declared requirement and scenario pairs.
 // LoadRepositoryManifest - Bind exact manifest bytes and validate repository paths.
 // ReadRepositoryFile - Read bounded regular files within the repository.
 // ValidateTrace - Match all scenarios to components, tests or deferred work.

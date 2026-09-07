@@ -1,3 +1,18 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify positive read evidence and disclosed input gaps.
+// SCOPE: Repository inventory is distinct from successful code or dependency analysis.
+// DEPENDS: cmd/secscan/coverage.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-honest-coverage
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestCoverageGapsSeparateAnalysisKinds - Prevent secret scans from claiming SAST or SCA coverage.
+// TestCoverageRequiresPerInputEvidence - Retain unread inputs after a partial scan.
+// TestSkippedScanIncludesInventory - Keep inventory when every selected scanner skips.
+// TestAcceptanceGitleaksUsesSelectedInventory - Keep ignored files outside real scanner input.
+// END_MODULE_MAP
+
 package main
 
 import (

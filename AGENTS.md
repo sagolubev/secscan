@@ -24,27 +24,32 @@
 3. Проверь `opsx-stale check openspec/changes/build-secscan`.
 4. Загрузи применимые repo-local skills из `.agents/skills/`.
 
-Первый implementation outcome — walking skeleton с Gitleaks. Остальные scanner
-adapters остаются заблокированы до прохождения его acceptance, security review
-и независимого review.
-
-## GRACE Pilot
+## GRACE
 
 OpenSpec и Beads остаются авторитетными; `.grace` не создаётся.
 
-Тонкий verifier должен проверять:
+Для нетривиального outcome:
 
-- связи `requirement -> component -> test`;
-- раздельные `baseline`, `target` и `final` evidence;
-- свежесть evidence относительно проверенного Git-состояния;
-- соответствие полного changed-file set заявленному scope.
+1. До implementation, включая новые тесты, задай в `trace.json` outcome,
+   полный baseline commit SHA, scope, связи requirement → component → test и checks.
+2. Выполни `go run ./cmd/tracecheck --phase baseline --run` до правок.
+3. После TDD и независимого review добавь проверяемые файлы в index через `git add`.
+4. Выполни `--phase target --run`, затем `--phase final --run`.
+5. Перед `br close` выполни `go run ./cmd/tracecheck --verify-evidence`.
+
+Manifest и authority остаются неизменными между фазами. Новый scope или набор
+checks требует нового спланированного outcome. Полные результаты CLI сохраняет
+в Beads; `br sync --flush-only` переносит их в `.beads/issues.jsonl`.
+Legacy-записи не удовлетворяют gate. Сам `br close` verifier не запускает.
 
 Trace metadata содержит только ссылки и команды. Не копируй в него текст
 требований, дизайн или задачи.
 
-При изменении ключевого Go-модуля читай и поддерживай его GRACE contract/map.
+Для каждого нового или изменённого Go-файла в `cmd/` и `internal/` поддерживай
+GRACE contract/map. Verifier проверяет AST-символы, ссылки и маркеры.
 Формат и условия применения: [docs/code-navigation.md](docs/code-navigation.md).
 Ссылки ведут в OpenSpec и tests; task status и evidence остаются в Beads.
+Порядок фаз и ограничения Git: [docs/grace-integration.md](docs/grace-integration.md).
 
 ## Go
 

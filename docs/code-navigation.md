@@ -10,7 +10,8 @@
 ## Разметка файла
 
 Перед изменением размеченного файла прочитай его контракт и связанные тесты.
-Для нового или существенно изменённого Go-модуля добавь короткий контракт и карту.
+Для каждого нового или изменённого Go-файла в `cmd/` и `internal/` добавь
+короткий контракт и карту. Неизменённые legacy-файлы можно размечать по мере работы.
 Размести их перед `package`, с пустой строкой после разметки.
 Сохрани build constraints и обычные Go doc comments на своих местах.
 
@@ -87,9 +88,15 @@ rg -n 'func TestParseRedactsSecretMaterial' internal/gitleaks/parser_test.go
 go test ./internal/gitleaks -run '^TestParseRedactsSecretMaterial$' -count=1
 ```
 
-Перед завершением изменения сверь карту с реальными символами, ссылки — с файлами,
-инварианты — с assertions тестов. Выполни проверки из связанного outcome и
-обязательные проверки проекта. Сам комментарий не доказывает прохождение теста.
+`go run ./cmd/tracecheck --validate-only` проверяет разметку по Go AST:
+парность маркеров, ROLE/MAP_MODE, символы карты, exports и локальные ссылки.
+Строки с примерами маркеров внутри Go literals разметкой не считаются.
+Проверяются все размеченные файлы и наличие разметки у новых/изменённых файлов.
+Для метода указывай `Type.Method`, например `Evidence.Seal`.
+
+Перед завершением сверь инварианты с assertions тестов. Выполни target/final
+из связанного outcome и `--verify-evidence`. Сам комментарий не доказывает
+прохождение теста; достаточность проверки остаётся предметом review.
 
 Это адаптация навигации по исходникам. Она сохраняет canonical маркеры, но заменяет
 `M-*`/`V-M-*` и XML-граф upstream существующими путями OpenSpec, кода и тестов.
@@ -97,9 +104,9 @@ go test ./internal/gitleaks -run '^TestParseRedactsSecretMaterial$' -count=1
 функции и trace-логи блоков из полного GRACE здесь не обязательны.
 
 Upstream [распознаёт Go-файлы][languages], но не имеет Go adapter для проверки
-соответствия `MODULE_MAP` экспортам. `tracecheck` проверяет свой manifest и evidence;
-его успешный запуск сам по себе не подтверждает точность комментариев.
-Смысл контрактов и полноту тестов проверяет review. Разбор всего workflow —
+соответствия `MODULE_MAP` экспортам. Локальный `tracecheck` проверяет эту связь
+через Go AST вместе с manifest и evidence. Смысл контрактов и полноту тестов
+проверяет review. Разбор всего workflow —
 в [grace-integration.md](grace-integration.md).
 
 [upstream]: https://github.com/osovv/grace-marketplace/tree/fbb9009fc21f1b867f1823f7885d35e3fc7944f0

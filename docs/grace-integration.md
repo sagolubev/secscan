@@ -124,8 +124,10 @@ governed автоматически. Это видно в [реестре язы
 включает diff от baseline до HEAD, index и рабочего дерева, оба пути rename
 и неигнорируемые untracked files.
 В [CI](../.github/workflows/ci.yml) `--validate-only` проверяет ссылки, scope,
-authority и staleness; тесты выполняются другими jobs. Validation JSON
-не объявляется фазовым evidence.
+Go-разметку, authority и staleness; `--verify-evidence` проверяет сохранённую
+цепочку относительно checkout. Отдельно проверяется экспорт/импорт Beads.
+Source и container jobs выполняют свежие тесты. Validation JSON не объявляется
+фазовым evidence.
 
 CLI проверяет последовательность baseline → target → final и сохраняет полные
 результаты в Beads. Target ссылается на baseline, final — на свежий target.

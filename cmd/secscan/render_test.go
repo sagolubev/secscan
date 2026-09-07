@@ -1,3 +1,19 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify visible HTML, full SARIF and safe output publication.
+// SCOPE: Synthetic reports and opt-in real scanner results.
+// DEPENDS: cmd/secscan/render.go, cmd/secscan/output.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-report-rendering
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestRunExportsVisibleHTMLAndFullSARIF - Keep HTML filtered and SARIF complete.
+// TestRunExportsFailedScanEvidence - Publish available failure evidence without claiming success.
+// TestReportOutputValidation - Reject invalid destinations before scanning.
+// TestOutputCollisionsFailBeforeScan - Reject overlapping output paths and filesystem aliases.
+// TestAcceptanceRenderedReports - Render findings from a real scanner.
+// END_MODULE_MAP
+
 package main
 
 import (

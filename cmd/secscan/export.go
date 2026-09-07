@@ -1,3 +1,17 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Publish complete Trivy reports outside the scanned repository.
+// SCOPE: Pin the output parent; never replace existing files or publish partial extraction.
+// DEPENDS: internal/report/trivy.go
+// LINKS: cmd/secscan/export_test.go#TestTrivyReportsRefusePartialCoverage, cmd/secscan/export_test.go#TestTrivyReportsCancellationAndLateConflict
+// ROLE: SCRIPT
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// repositoryRelativePath - Resolve repository aliases by filesystem identity.
+// prepareExportDestination - Pin a new destination outside the worktree.
+// exportDestination.write - Publish both complete reports or clean up incomplete output.
+// END_MODULE_MAP
+
 package main
 
 import (

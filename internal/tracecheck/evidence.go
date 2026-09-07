@@ -18,6 +18,8 @@
 // AuthorityHash - Hash task meaning without lifecycle or evidence comments.
 // ValidateDeferred - Require deferred work to exist in the selected epic.
 // RunChecks - Run explicit argument vectors and record success or failure.
+// checkOutput.Write - Bound and hash check output while counting Go test events.
+// limitedBuffer.Write - Bound Beads output before decoding its records.
 // END_MODULE_MAP
 
 package tracecheck

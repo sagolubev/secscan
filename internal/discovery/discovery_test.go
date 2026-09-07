@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify scanner input classification and safe repository traversal.
+// SCOPE: Real Git fixtures; control aliases and ignored files stay excluded.
+// DEPENDS: internal/discovery/discovery.go, internal/discovery/inventory.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-honest-coverage
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestDiscoverSplitsTrackedAndUntrackedLanguages - Classify eligible Python and TypeScript files.
+// TestStageRejectsIntermediateSymlink - Prevent staging through a symlink parent.
+// TestCIDiscoveryAndNoFSMonitor - Classify CI files without executing repository hooks.
+// TestDependencyDiscovery - Recognize dependency inputs and ecosystems.
+// TestTraversalInventory - Account for tracked, untracked and ignored files.
+// TestTraversalControlIdentityAndPlannedOutput - Exclude control-file aliases and planned output paths.
+// END_MODULE_MAP
+
 package discovery
 
 import (

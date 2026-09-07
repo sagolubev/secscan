@@ -1,7 +1,7 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Validate scope and run declared verification phases.
 // SCOPE: Check state before and after commands; validation-only never claims test success.
-// DEPENDS: internal/tracecheck/evidence.go, internal/tracecheck/git.go, internal/tracecheck/tracecheck.go
+// DEPENDS: internal/tracecheck/evidence.go, internal/tracecheck/git.go, internal/tracecheck/tracecheck.go, internal/tracecheck/navigation.go
 // LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
@@ -223,6 +223,9 @@ func validate(root string, manifest tracecheck.Manifest, requirePaths bool) (val
 		return result, err
 	}
 	if err := tracecheck.ValidateScope(manifest.Scope, result.Changes); err != nil {
+		return result, err
+	}
+	if err := tracecheck.ValidateNavigation(root, result.Changes); err != nil {
 		return result, err
 	}
 	result.StateIdentity, err = tracecheck.StateIdentity(root, manifest.BaselineCommit, manifest.Scope, result.Changes)

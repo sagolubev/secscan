@@ -1,3 +1,19 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify complete Trivy exports and safe publication failures.
+// SCOPE: Synthetic payloads plus opt-in real SBOM and SonarQube acceptance.
+// DEPENDS: cmd/secscan/export.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-trivy-integration-reports
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestTrivyReportsRejectUnconfirmedInventory - Reject exports without positive extraction evidence.
+// TestTrivyReportsWriteBothFilesAndKeepStdoutCanonical - Publish both files without changing JSON stdout.
+// TestTrivyReportsRefusePartialCoverage - Reject incomplete dependency extraction.
+// TestTrivyReportsCancellationAndLateConflict - Preserve existing data after cancellation or conflicts.
+// TestAcceptanceTrivyReports - Check real packages and external-issue locations.
+// END_MODULE_MAP
+
 package main
 
 import (

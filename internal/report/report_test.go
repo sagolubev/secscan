@@ -1,3 +1,19 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify stable finding identities, merging and JSON output.
+// SCOPE: Normalization must preserve input data and baseline fragments.
+// DEPENDS: internal/report/report.go, internal/report/baseline.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-canonical-finding-model
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestMarshalSortsFindings - Produce deterministic finding order.
+// TestDependencyAliasMergeTransitiveAndStable - Merge advisory aliases without merging package versions.
+// TestCodeMergePreservesFingerprint - Keep identity across shared scanner rules.
+// TestImagePackageIdentity - Separate image digests and package qualifiers.
+// TestMarshalPreservesBaselineFragments - Keep expanded fragments distinct after serialization.
+// END_MODULE_MAP
+
 package report
 
 import (

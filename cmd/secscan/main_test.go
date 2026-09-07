@@ -1,3 +1,21 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify CLI selection, progress, failure reports and runtime preparation.
+// SCOPE: Fake runtimes cover contracts; opt-in acceptance covers real container scans.
+// DEPENDS: cmd/secscan/main.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-cli-contract
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestInformationFlagsWithoutRepositoryOrRuntime - Keep version and license output self-contained.
+// TestRunWritesOneJSONDocument - Separate canonical stdout from progress.
+// TestScanMissingPreparationIsActionableAndDoesNotPull - Avoid implicit network preparation during scans.
+// TestCLIRejectsIaCWithoutEvaluatedInputs - Reject an apparent clean result without analysis.
+// TestNativeSelectionAndOCIConsent - Require explicit consent for image scanning.
+// TestRunEmitsFailureEvidenceWithoutClaimingSuccess - Retain partial evidence without leaking raw diagnostics.
+// TestAcceptanceCLIContainerScan - Exercise the public CLI through real scanners.
+// END_MODULE_MAP
+
 package main
 
 import (

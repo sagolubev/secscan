@@ -11,8 +11,8 @@
 // resolveControlPath - Resolve an explicit control path and worktree membership.
 // prepareOutputFile - Validate a new file destination without creating it.
 // validateOutputNames - Reject filesystem-equivalent names across output formats.
-// close - Release opened directory handles.
-// write - Atomically publish complete bytes without overwriting.
+// fileDestination.close - Release opened directory handles.
+// fileDestination.write - Atomically publish complete bytes without overwriting.
 // END_MODULE_MAP
 
 package main
@@ -178,13 +178,13 @@ func (destination *fileDestination) close() {
 	destination.parent.Close()
 }
 
-// START_CONTRACT: write
+// START_CONTRACT: fileDestination.write
 // PURPOSE: Publish complete output without a pathname race or replacement of user data.
 // INPUTS: ctx: cancellation; data: serialized report bytes.
 // OUTPUTS: New complete file or error; an existing destination remains untouched.
 // SIDE_EFFECTS: Creates and removes an owned staging file under the pinned parent.
 // LINKS: cmd/secscan/baseline_test.go#TestBaselinePinsOutputParent, cmd/secscan/baseline_test.go#TestBaselinePublicationFailuresPreserveData
-// END_CONTRACT: write
+// END_CONTRACT: fileDestination.write
 
 func (destination *fileDestination) write(ctx context.Context, data []byte) (resultErr error) {
 	if err := ctx.Err(); err != nil {

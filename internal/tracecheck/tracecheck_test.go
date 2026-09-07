@@ -1,3 +1,20 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify scenario coverage, scope and command failure handling.
+// SCOPE: Local fixtures; checks preserve status and stop on the first failure.
+// DEPENDS: internal/tracecheck/tracecheck.go, internal/tracecheck/evidence.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestParseScenarios - Extract requirement and scenario pairs.
+// TestValidateTraceRequiresEveryScenario - Reject incomplete trace coverage.
+// TestValidateScopeChecksBothRenamePaths - Check the source and destination of a rename.
+// TestAuthorityHashRejectsManifestEpicMismatch - Keep the outcome under the declared epic.
+// TestRunChecksStopsAfterFailure - Do not execute checks after a failure.
+// TestRunChecksRejectsUnexpectedStdout - Make nonempty formatter output a failed check.
+// END_MODULE_MAP
+
 package tracecheck
 
 import (
