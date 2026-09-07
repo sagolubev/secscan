@@ -65,6 +65,7 @@ type Image struct {
 }
 
 type Scanner struct {
+	History        *GitHistory   `json:"history,omitempty"`
 	CustomRulePack *RulePack     `json:"customRulePack,omitempty"`
 	Scope          *ScannerScope `json:"scope,omitempty"`
 	TrivyReports   *TrivyReports `json:"-"`
@@ -125,6 +126,7 @@ type Location struct {
 }
 
 type Finding struct {
+	Commit      string     `json:"commit,omitempty"`
 	ImageDigest string     `json:"imageDigest,omitempty"`
 	Package     *Package   `json:"package,omitempty"`
 	Advisories  []string   `json:"advisories,omitempty"`

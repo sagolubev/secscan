@@ -186,8 +186,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			return 2
 		}
 	}
-	if len(scopes) > 0 && (updating || readBaselineFlag || writeBaselineFlag) {
-		fmt.Fprintln(stderr, "--scope cannot be combined with update, --baseline or --write-baseline")
+	if len(scopes) > 0 && (updating || readBaselineFlag || writeBaselineFlag || slices.Contains(selection, "gitleaks-history")) {
+		fmt.Fprintln(stderr, "--scope cannot be combined with update, --baseline, --write-baseline or gitleaks-history")
 		return 2
 	}
 	if configFlag && noConfigFlag || configFlag && *configFile == "" || severityFlag && (*minSeverity == "" || !filter.ValidSeverity(*minSeverity)) || updating && (configFlag || noConfigFlag || severityFlag) {
@@ -421,7 +421,7 @@ func scan(
 		return report.Report{}, err
 	}
 	dependencyFiles, dependencyUnread := scanner.DependencyInputs(inventory.Dependencies)
-	needsRuntime := slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
+	needsRuntime := slices.Contains(selection, "gitleaks-history") || slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
 		slices.Contains(selection, "gradle-catalog") && len(scanner.NativeInputs("gradle-catalog", inventory.Native)) > 0 ||
 		slices.Contains(selection, "gradle-scripts") && len(scanner.NativeInputs("gradle-scripts", inventory.Native)) > 0 ||
 		slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 ||
@@ -434,14 +434,18 @@ func scan(
 		slices.Contains(selection, "bearer") && len(inventory.Bearer) > 0 ||
 		slices.Contains(selection, "cppcheck") && len(inventory.Cppcheck) > 0
 	var runtime container.Runtime
+	var runtimeErr error
 	if needsRuntime {
-		runtime, err = container.DetectDefault(ctx)
-		if err != nil {
-			return report.Report{}, err
+		runtime, runtimeErr = container.DetectDefault(ctx)
+		if runtimeErr != nil && !(slices.Contains(selection, "refresh-versions") && len(scanner.NativeInputs("refresh-versions", inventory.Native)) > 0) {
+			return report.Report{}, runtimeErr
 		}
 	}
 
 	cache, cacheErr := scanner.DefaultCache()
+	if runtimeErr != nil {
+		cacheErr = runtimeErr
+	}
 	var jobs []orchestrator.Job
 	var skipped []report.Scanner
 	preparationErrors := map[string]error{}
@@ -464,6 +468,9 @@ func scan(
 	}
 	if slices.Contains(selection, "oci-images") && (len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0) {
 		jobs = append(jobs, orchestrator.Job{Name: "oci-images", Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+			if runtimeErr != nil {
+				return report.Scanner{}, nil, runtimeErr
+			}
 			return scanner.ScanOCI(ctx, runtime, cache, root, inventory.OCI, true, emit)
 		}})
 	} else if slices.Contains(selection, "oci-images") || len(unchecked.Images) > 0 || unchecked.Coverage.Unread > 0 || unchecked.Coverage.FailedFiles > 0 {
@@ -476,12 +483,14 @@ func scan(
 		skipped = append(skipped, report.Scanner{Name: "gitleaks", Status: "skipped", Coverage: report.Coverage{Unit: "repository"}})
 		emit(progress.Event{Scanner: "gitleaks", Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 	}
-	if slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 {
+	if slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 || slices.Contains(selection, "gitleaks-history") {
 		if cacheErr != nil {
 			gitleaksErr = cacheErr
 		} else {
 			gitleaksAsset, gitleaksErr = cache.Resolve(ctx, runtime, "gitleaks")
 		}
+	}
+	if slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 {
 		if gitleaksErr != nil {
 			preparationErrors["gitleaks"] = gitleaksErr
 		}
@@ -510,6 +519,24 @@ func scan(
 				return result.Scanners[0], result.Findings, nil
 			},
 		})
+	}
+	if slices.Contains(selection, "gitleaks-history") {
+		if gitleaksErr != nil {
+			preparationErrors["gitleaks-history"] = gitleaksErr
+		}
+		jobs = append(jobs, orchestrator.Job{Name: "gitleaks-history", Timeout: 10 * time.Minute, Run: func(ctx context.Context) (report.Scanner, []report.Finding, error) {
+			if gitleaksErr != nil {
+				return report.Scanner{Coverage: report.Coverage{Unit: "repository"}}, nil, gitleaksErr
+			}
+			history, err := gitleaks.ScanHistory(ctx, runtime, root, emit, gitleaksAsset.ImageID)
+			if len(history.Scanners) != 1 {
+				if err == nil {
+					err = fmt.Errorf("invalid Gitleaks history result")
+				}
+				return report.Scanner{Coverage: report.Coverage{Unit: "repository"}}, nil, err
+			}
+			return history.Scanners[0], history.Findings, err
+		}})
 	}
 
 	languages := []struct {
@@ -632,7 +659,7 @@ func scan(
 			emit(progress.Event{Scanner: name, Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 			continue
 		}
-		if name == "bearer" {
+		if name == "bearer" && runtimeErr == nil {
 			arch, err := scanner.RuntimeArchitecture(ctx, runtime)
 			if err != nil {
 				return report.Report{}, err
@@ -687,10 +714,16 @@ func scan(
 		}
 		if preparationErrors[result.Scanners[i].Name] != nil {
 			result.Scanners[i].Limitations = []string{"prepared assets unavailable; run secscan update"}
+			if runtimeErr != nil {
+				result.Scanners[i].Limitations = []string{"container runtime unavailable"}
+			}
 		}
 	}
 	if result.Successes == 0 && len(preparationErrors) > 0 {
 		runErr = fmt.Errorf("prepared assets unavailable; run secscan update: %w", orchestrator.ErrAllScannersFailed)
+		if runtimeErr != nil {
+			runErr = fmt.Errorf("container runtime unavailable: %w", orchestrator.ErrAllScannersFailed)
+		}
 	}
 	if result.Successes == 0 && len(selection) == 1 && selection[0] == "bearer" && len(skipped) == 0 {
 		runErr = fmt.Errorf("Bearer execution failed or coverage_unconfirmed: no positive file analysis evidence: %w", orchestrator.ErrAllScannersFailed)
@@ -747,7 +780,7 @@ func parseScannerSelection(value string) ([]string, error) {
 	if value == "all" {
 		return allowed, nil
 	}
-	allowed = append(allowed, "oci-images")
+	allowed = append(allowed, "oci-images", "gitleaks-history")
 	seen := make(map[string]bool)
 	var selected []string
 	for _, name := range strings.Split(value, ",") {

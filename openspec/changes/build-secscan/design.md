@@ -925,3 +925,65 @@ Least confident: third-party rule DSL support differs between the two pinned
 engines. Import does not promise that every rule is compatible with both;
 engine parse failures are explicit. A mismatch must not be fixed by skipping
 invalid rules or weakening read-evidence checks.
+
+
+## Explicit Git-history secrets
+
+Feature profile, Standard artifacts, Comprehensive verification. Outcome .22 is
+its own vertical skeleton: frozen HEAD -> independent bare snapshot -> pinned
+Gitleaks -> sanitized commit-aware findings. Reuse the existing engine, runtime,
+progress and report pipeline; no new scanner dependency or second tracker.
+
+Add explicit persona gitleaks-history; keep it outside all. It can run beside
+working-tree gitleaks and other scanners. Update maps both personas to the same
+prepared gitleaks asset. Reject --scope with history because file narrowing is
+not implemented. History means the complete ancestry of the current HEAD only,
+not every branch/tag. Fail rather than truncate beyond 100000 reachable commits
+or a 512 MiB bundle. Parent command context also bounds snapshot creation.
+
+Resolve HEAD once and reject shallow repositories and info/grafts. Host Git uses
+no-replace-objects, no optional locks, disabled hooks/fsmonitor/automatic GC,
+disabled global/system config and no lazy fetch or network protocols. Build a
+bounded `git bundle create - HEAD` stream in a private cache workspace, verify
+its sole HEAD advertisement matches the resolved commit, then clone that bundle
+with --bare --no-local --no-hardlinks --template= into the owned workspace.
+The resulting bare repo has detached HEAD and no advertised branch refs; always
+pass the immutable HEAD explicitly to Gitleaks --log-opts. Source Git metadata
+and shared common directories are never mounted into a scanner.
+
+Local native probes confirmed this path finds a deleted synthetic token at its
+original commit. They also found Gitleaks 8.30.1 returning exit0 and [] when Git
+rejects bind-mount ownership. Set safe.directory=/repo only in the scanner's
+private Git environment for this generated snapshot; never trust a wildcard or
+alter host Git configuration. Keep network none, read-only snapshot, explicit
+writable output, numeric user, cap-drop ALL and no-new-privileges. Reject Git/error
+diagnostics with the existing bounded runtime interface, even on exit0. Do not
+copy raw diagnostics to the report. Read the output as a bounded regular file
+without following symlinks. Cancellation removes only owned workspace/container.
+
+History findings keep source gitleaks, origin git_history and a validated full
+commit SHA. Fingerprints include origin and commit, so the same location in the
+working tree remains distinct. Parse only allowlisted rule/location/commit
+fields; messages stay static. Validate that commits belong to the snapshot's
+selected ancestry. Preserve old working-tree fingerprints and normal defaults.
+Add optional Finding.Commit and Scanner.History {head, commits}. Commits counts
+snapshot candidates; successful Gitleaks only proves repository-level completion,
+not that every commit has an analyzed patch. Its Git mode scans added lines in
+patches; native inline waivers remain part of the existing scanner contract.
+
+HTML displays the immutable commit, SARIF retains it in canonical properties,
+and baseline decode validates the new provenance while secret exemptions remain.
+A failed history job preserves other scanner outcomes; no pre-existing user file,
+Git ref, worktree or cache generation is modified. Rollback omits the persona or
+reverts the additive commit.
+
+Verify default/explicit selection, shared preparation, working/history separation,
+removed canaries, linked worktree common-dir isolation, hostile config/hooks,
+shallow/moving/oversized snapshots, Git diagnostic false success, cancellation,
+regular report reads, commit validation and unchanged full exports. Native CLI
+acceptance must prove removed-history detection without exposing the canary.
+Independent security review and all existing GRACE/source/container gates remain.
+
+Least confident: Gitleaks reports patch statistics differently from rev-list
+ancestry; metadata must keep those concepts separate. Git history extraction
+must fail closed on missing objects rather than start an implicit fetch.

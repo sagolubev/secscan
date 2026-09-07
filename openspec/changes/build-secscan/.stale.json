@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-07T14:41:38Z",
+  "updated_at": "2026-09-07T15:51:35Z",
   "artifacts": {
     "proposal.md": {
       "sha256": "d7073fe0294f78f9b8c83a38a4af62607c956e54faf2785f20396e9a20ca6ede",
@@ -8,15 +8,15 @@
       "depends_on": []
     },
     "design.md": {
-      "sha256": "f87b4e868bb45c67b3905d205b0b19b4bf4296998b8f2672d1720fcad773ff5b",
-      "synced_at": "2026-09-07T14:41:38Z",
+      "sha256": "6f72af0c73116215480212fd72a9bfade6e9bf6ee9f83c6c3ea5aa6648a2d555",
+      "synced_at": "2026-09-07T15:51:35Z",
       "depends_on": [
         "proposal.md"
       ]
     },
     "specs/secscan/spec.md": {
-      "sha256": "8eb397084c3032a91287d4d3e38770fc5f88e11389adc5260e50fa68c4884663",
-      "synced_at": "2026-09-07T14:41:38Z",
+      "sha256": "9879e2fc8c0e91e0baf4f77ac4878eb2d35d8040f878627ad447890eb7c4e640",
+      "synced_at": "2026-09-07T15:51:35Z",
       "depends_on": [
         "design.md"
       ]

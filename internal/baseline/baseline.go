@@ -390,6 +390,14 @@ func validate(f report.Finding) error {
 	if f.Kind != "error" && f.Origin == "" {
 		return invalid
 	}
+	if f.Origin == "git_history" {
+		commit, err := hex.DecodeString(f.Commit)
+		if err != nil || len(commit) != 20 && len(commit) != 32 || strings.ToLower(f.Commit) != f.Commit || f.Kind != "secret" {
+			return invalid
+		}
+	} else if f.Commit != "" {
+		return invalid
+	}
 	if len(f.Fingerprint) != 64 {
 		return invalid
 	}
@@ -483,7 +491,7 @@ func validJSON(decoder *json.Decoder, depth int) bool {
 				return false
 			}
 			name, ok := key.(string)
-			if !ok || seen[name] || !slices.Contains([]string{"schemaVersion", "fingerprintAlgorithm", "findings", "imageDigest", "package", "advisories", "locations", "kind", "ruleId", "message", "path", "line", "endLine", "fingerprint", "sources", "origin", "language", "severity", "qualifiers", "ecosystem", "name", "version", "purl"}, name) {
+			if !ok || seen[name] || !slices.Contains([]string{"schemaVersion", "fingerprintAlgorithm", "findings", "imageDigest", "package", "advisories", "locations", "kind", "ruleId", "message", "path", "line", "endLine", "fingerprint", "sources", "origin", "language", "severity", "qualifiers", "ecosystem", "name", "version", "purl", "commit"}, name) {
 				return false
 			}
 			seen[name] = true

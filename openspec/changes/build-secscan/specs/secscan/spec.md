@@ -154,6 +154,27 @@
 - **WHEN** scanner сообщает finding из working tree или Git history
 - **THEN** finding явно указывает соответствующий origin
 
+#### Scenario: Explicit history scan
+- **WHEN** пользователь выбирает `--scanners gitleaks-history`
+- **THEN** сканируется история, достижимая из зафиксированного HEAD, а history findings содержат `origin=git_history` и полный `commit` SHA
+- **AND** обычный `all` сохраняет прежний набор scanners; working-tree Gitleaks можно выбрать одновременно
+
+#### Scenario: History snapshot boundary
+- **WHEN** сканируется обычный или linked worktree
+- **THEN** Gitleaks получает отдельный read-only bare snapshot выбранной истории без исходных config, hooks, remotes и container socket
+- **AND** host Git не выполняет hooks, external diff или lazy network fetch; shallow, grafted, changed-HEAD и превышающие limits snapshots отклоняются
+
+#### Scenario: History failure evidence
+- **WHEN** Git или history scanner сообщает ошибку, даже при exit code 0
+- **THEN** history scan не выдаёт успешный clean result; остальные успешные scanners сохраняются
+- **AND** candidate commit count отделён от repository-level completion и не объявляется per-commit read evidence
+
+#### Scenario: Historical report safety
+- **WHEN** секрет удалён из текущего дерева, но существует в выбранной истории
+- **THEN** report содержит sanitized finding с исходным commit и стабильным fingerprint, отличным от working-tree finding
+- **AND** сообщения коммитов, authors, secret values и snippets не попадают в JSON, HTML или SARIF
+- **AND** baselines сохраняют commit provenance и никогда не скрывают secret findings; `--scope` с history scanner отклоняется
+
 ### Requirement: Honest coverage
 
 Система SHALL отличать отсутствие findings от отсутствия анализа.

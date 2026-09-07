@@ -1,3 +1,16 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Prepare and resolve immutable scanner assets without implicit scan downloads.
+// SCOPE: Publish successful generations only; history and working-tree Gitleaks share one asset.
+// DEPENDS: internal/scanner/cache.go, internal/gitleaks/run.go, internal/opengrep/image.go
+// LINKS: cmd/secscan/history_test.go#TestAcceptanceHistoryCLI, openspec/changes/build-secscan/specs/secscan/spec.md#requirement-scanner-preparation
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// Update - Prepare the selected engines and feeds as an atomic generation.
+// Cache.Resolve - Verify a prepared immutable engine and its assets locally.
+// END_MODULE_MAP
+
 package scanner
 
 import (
@@ -30,6 +43,9 @@ func Update(ctx context.Context, runtime container.Runtime, cache Cache, selecti
 				continue
 			}
 			key := name
+			if key == "gitleaks-history" {
+				key = "gitleaks"
+			}
 			if name == "gradle-catalog" || name == "gradle-scripts" {
 				key = "osv-scanner"
 			}

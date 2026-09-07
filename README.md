@@ -132,6 +132,7 @@ secscan /path/to/repository > /tmp/secscan-report.json
 | Область | Значения `--scanners` |
 |---|---|
 | Секреты в рабочем дереве | `gitleaks` |
+| Секреты в истории Git, по явному выбору | `gitleaks-history` |
 | Код | `python-sast`, `typescript-sast`, `semgrep`, `bearer`, `cppcheck` |
 | Зависимости | `trivy`, `grype`, `osv-scanner` |
 | CI | `zizmor`, `poutine` |
@@ -220,6 +221,37 @@ Limits: 256 YAML files, 4096 rules, 2 MiB на файл и 16 MiB на паке�
 manifest и license — до 64 KiB каждый. Symlinks, duplicate keys/IDs, YAML aliases,
 remote includes и executable validators отклоняются. Кэш должен находиться
 вне сканируемого репозитория. Наборы сторонних правил не входят в бинарник.
+
+## История Git
+
+В текущих исходниках доступен отдельный scanner `gitleaks-history`.
+Он не входит в `all`. Подготовьте движок и явно выберите историю:
+
+```sh
+secscan update --scanners gitleaks-history /path/to/repository
+secscan --scanners gitleaks,gitleaks-history /path/to/repository > /tmp/secscan-history.json
+```
+
+Проверяется история, достижимая из текущего `HEAD`, включая удалённые файлы.
+Это не обход всех branches/tags. Для другой ветки выберите её checkout или linked
+worktree. Находки истории имеют `origin: git_history` и полный `commit` SHA;
+текущее дерево сохраняет `origin: working_tree`. Commit входит в fingerprint,
+показывается в HTML и сохраняется в SARIF и baseline. Исторические секреты
+остаются `exempt` при сравнении baseline.
+
+`scanners[].history.head` фиксирует выбранный HEAD, `history.commits` считает
+reachable candidates. Gitleaks проверяет добавленные строки patch history и
+сообщает завершение на уровне репозитория; число кандидатов не является
+подтверждением анализа каждого commit.
+
+Scanner получает самостоятельный bare snapshot с read-only mount и отключённой
+сетью. Исходные `.git`, config, hooks и shared common directory в контейнер
+не передаются. Ошибки Git не считаются успешным scan даже при exit code 0.
+Source Git state не меняется; временный snapshot удаляется после запуска.
+
+Shallow repositories, grafts, изменившийся при snapshot HEAD, более 100000 commits
+или bundle больше 512 MiB дают ошибку вместо молчаливого усечения. `--scope`
+несовместим с history scanner. Native inline waivers Gitleaks сохраняются.
 
 ## Отдельные файлы и каталоги
 
@@ -485,7 +517,7 @@ Config должен быть обычным UTF-8 файлом размером 
 Gradle-проверки читают статические координаты зависимостей, не запускают wrapper
 или build scripts. `refresh-versions` читает существующие подсказки обновлений,
 но не проверяет доступность новых версий. GitLab includes не загружаются.
-Gitleaks проверяет рабочее дерево, а не историю Git.
+Обычный `gitleaks` проверяет рабочее дерево; `gitleaks-history` выбирается отдельно.
 
 Пока нет LLM-анализа и token budget. Podman и rootless остаются
 непроверенными режимами. [Историческое сравнение с DietSec](docs/feature-status.md)
