@@ -747,3 +747,43 @@ fragment entrypoint and CLI config/pipeline. Verify strict/hostile configs,
 overlapping and partial rules, exemptions, baseline ordering, unchanged full
 exports and input immutability through focused tests plus a real CLI fixture.
 Rollback: --no-config/remove optional flags or revert the outcome commits.
+
+## Explicit scan scopes
+
+Add repeatable --scope PATH, at most 16 arguments, relative to the resolved Git
+root. Normalize ./ and duplicate/overlapping selections. Require Git inventory
+spelling: a filesystem case alias with no matching Git path is an error, never
+an empty successful scan. Reject empty, absolute, traversing, backslash, symlink,
+non-regular, missing and zero-eligible-file selections. A scope uses only safe
+nonignored regular inputs after control exclusions. Update, --baseline and
+--write-baseline reject scopes with usage exit2.
+
+Keep full and narrowed inventories. Narrow only Gitleaks, project Python and
+TypeScript SAST, Semgrep's same local rule pack, and Zizmor. Other personas keep
+the full repository candidates: Bearer, Cppcheck, IaC, Poutine, dependencies,
+Gradle and OCI may require wider context. Their findings stay attached to actual
+paths, including paths outside the requested scope. No result filter pretends
+they scanned less. One finite scanner-input mapping serves execution selection
+and scope metadata to prevent the two descriptions drifting apart.
+
+Add optional Report.Scope with paths and selectedFiles, and Scanner.Scope with
+mode (files or repository) and candidateFiles. Counts are candidate inputs, not
+proof of reads. The existing traversal inventory still describes the complete
+Git worktree. Coverage gaps use scoped code inputs unless a whole-repository
+code scanner is selected, and complete dependency candidates when a dependency
+or Gradle scanner uses them. HTML and SARIF disclose the same scope metadata.
+Unscoped behavior and JSON remain compatible.
+
+discovery.SelectScopes(root, fullInventory, scopes) returns a narrowed inventory
+and sorted unique requested paths. It filters all candidate slices without
+mutating the full inventory and preserves its traversal metadata. CLI selects
+the appropriate full/narrowed candidates per persona, including applicability
+and runtime preparation; an out-of-scope file must not trigger a narrowed job.
+
+Verify file/directory unions, controls, ignored/deleted paths, symlinks, argument
+limits and conflicts, preservation of full metadata, and no input mutation.
+A real two-directory Python fixture proves only the selected source is analysed;
+a simultaneous refresh-versions fixture proves a whole-repository persona keeps
+its outside-scope finding and scope mode. Rollback: omit --scope or revert the
+additive outcome. Shared report/filter/snapshot behavior remains under regression
+tests and independent review.

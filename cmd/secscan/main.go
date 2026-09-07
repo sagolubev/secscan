@@ -1,14 +1,14 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Compose CLI validation, isolated scanners and canonical output.
 // SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
-// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go, cmd/secscan/scope.go
 // LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
 // main - Own process cancellation and exit status.
-// scanOptions - Explicit scanner selection and excluded control paths.
+// scanOptions - Explicit scanner/scoped-path selection and excluded control files.
 // run - Validate policy and outputs, filter visible findings and preserve full exports.
 // scan - Compose prepared scanner jobs and inventory evidence.
 // buildReport - Preserve successful and partial results.
@@ -49,6 +49,7 @@ import (
 
 type scanOptions struct {
 	Scanners     []string
+	Scopes       []string
 	TrivyReports bool
 	Excluded     []string
 }
@@ -86,6 +87,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	noConfig := flags.Bool("no-config", false, "ignore project filtering configuration")
 	minSeverity := flags.String("min-severity", "", "hide ranked findings below this severity; keep secrets, errors and unknown severity")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
+	var scopes scopeFlags
+	flags.Var(&scopes, "scope", "limit file-safe scanners to a Git-relative file or directory; repeat up to 16 times")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -158,6 +161,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			severityFlag = true
 		}
 	})
+	if len(scopes) > 0 && (updating || readBaselineFlag || writeBaselineFlag) {
+		fmt.Fprintln(stderr, "--scope cannot be combined with update, --baseline or --write-baseline")
+		return 2
+	}
 	if configFlag && noConfigFlag || configFlag && *configFile == "" || severityFlag && (*minSeverity == "" || !filter.ValidSeverity(*minSeverity)) || updating && (configFlag || noConfigFlag || severityFlag) {
 		fmt.Fprintln(stderr, "invalid filtering flags: choose --config or --no-config, a valid --min-severity, and use them only with scan")
 		return 2
@@ -290,7 +297,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, TrivyReports: wantReports, Excluded: controlPaths}, reporter.Emit)
+	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, Scopes: scopes, TrivyReports: wantReports, Excluded: controlPaths}, reporter.Emit)
 	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
 		fmt.Fprintln(stderr, scanErr)
@@ -377,6 +384,10 @@ func scan(
 	if err != nil {
 		return report.Report{}, err
 	}
+	scopedInventory, scopePaths, err := discovery.SelectScopes(root, inventory, options.Scopes)
+	if err != nil {
+		return report.Report{}, err
+	}
 	for _, name := range selection {
 		emit(progress.Event{Scanner: name, Stage: progress.StageQueued, Status: progress.StatusQueued})
 	}
@@ -388,13 +399,13 @@ func scan(
 	needsRuntime := slices.Contains(selection, "oci-images") && len(unchecked.Images) > 0 ||
 		slices.Contains(selection, "gradle-catalog") && len(scanner.NativeInputs("gradle-catalog", inventory.Native)) > 0 ||
 		slices.Contains(selection, "gradle-scripts") && len(scanner.NativeInputs("gradle-scripts", inventory.Native)) > 0 ||
-		slices.Contains(selection, "gitleaks") && len(inventory.Files) > 0 ||
-		slices.Contains(selection, "python-sast") && len(inventory.Python) > 0 ||
-		slices.Contains(selection, "typescript-sast") && len(inventory.TypeScript) > 0 ||
-		slices.Contains(selection, "zizmor") && len(inventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
+		slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 ||
+		slices.Contains(selection, "python-sast") && len(scopedInventory.Python) > 0 ||
+		slices.Contains(selection, "typescript-sast") && len(scopedInventory.TypeScript) > 0 ||
+		slices.Contains(selection, "zizmor") && len(scopedInventory.Zizmor) > 0 || slices.Contains(selection, "poutine") && len(inventory.Poutine) > 0 ||
 		slices.Contains(selection, "checkov") && len(inventory.Checkov) > 0 || slices.Contains(selection, "checkov-terraform") && len(inventory.Terraform) > 0 || slices.Contains(selection, "kics") && len(inventory.KICS) > 0 ||
 		(slices.Contains(selection, "trivy") || slices.Contains(selection, "grype") || slices.Contains(selection, "osv-scanner")) && len(dependencyFiles) > 0 ||
-		slices.Contains(selection, "semgrep") && len(inventory.Python)+len(inventory.TypeScript) > 0 ||
+		slices.Contains(selection, "semgrep") && len(scopedInventory.Python)+len(scopedInventory.TypeScript) > 0 ||
 		slices.Contains(selection, "bearer") && len(inventory.Bearer) > 0 ||
 		slices.Contains(selection, "cppcheck") && len(inventory.Cppcheck) > 0
 	var runtime container.Runtime
@@ -436,11 +447,11 @@ func scan(
 	}
 	var gitleaksAsset scanner.Asset
 	var gitleaksErr error
-	if slices.Contains(selection, "gitleaks") && len(inventory.Files) == 0 {
+	if slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) == 0 {
 		skipped = append(skipped, report.Scanner{Name: "gitleaks", Status: "skipped", Coverage: report.Coverage{Unit: "repository"}})
 		emit(progress.Event{Scanner: "gitleaks", Stage: progress.StageSkipped, Status: progress.StatusSkipped})
 	}
-	if slices.Contains(selection, "gitleaks") && len(inventory.Files) > 0 {
+	if slices.Contains(selection, "gitleaks") && len(scopedInventory.Files) > 0 {
 		if cacheErr != nil {
 			gitleaksErr = cacheErr
 		} else {
@@ -456,7 +467,7 @@ func scan(
 				if gitleaksErr != nil {
 					return report.Scanner{}, nil, gitleaksErr
 				}
-				target, err := discovery.Stage(root, inventory.Files)
+				target, err := discovery.Stage(root, scopedInventory.Files)
 				if err != nil {
 					return report.Scanner{}, nil, err
 				}
@@ -466,7 +477,7 @@ func scan(
 					return report.Scanner{}, nil, err
 				}
 				for _, finding := range result.Findings {
-					if !slices.Contains(inventory.Files, finding.Path) {
+					if !slices.Contains(scopedInventory.Files, finding.Path) {
 						return report.Scanner{}, nil, fmt.Errorf("Gitleaks reported a path outside selected inputs")
 					}
 				}
@@ -481,8 +492,8 @@ func scan(
 		name    string
 		files   []string
 	}{
-		{scanner: "python-sast", name: "python", files: inventory.Python},
-		{scanner: "typescript-sast", name: "typescript", files: inventory.TypeScript},
+		{scanner: "python-sast", name: "python", files: scopedInventory.Python},
+		{scanner: "typescript-sast", name: "typescript", files: scopedInventory.TypeScript},
 	}
 	needsImage := false
 	for _, language := range languages {
@@ -579,26 +590,11 @@ func scan(
 		if !slices.Contains(selection, name) {
 			continue
 		}
-		files := inventory.Zizmor
-		switch name {
-		case "semgrep":
-			files = append(append([]string(nil), inventory.Python...), inventory.TypeScript...)
-			slices.Sort(files)
-		case "bearer":
-			files = inventory.Bearer
-		case "cppcheck":
-			files = inventory.Cppcheck
-		case "poutine":
-			files = inventory.Poutine
-		case "checkov":
-			files = inventory.Checkov
-		case "checkov-terraform":
-			files = inventory.Terraform
-		case "kics":
-			files = inventory.KICS
-		case "trivy", "grype", "osv-scanner":
-			files = inventory.Dependencies
+		source := inventory
+		if fileScopedScanner(name) {
+			source = scopedInventory
 		}
+		files := inputsForScanner(name, source)
 		dependency := name == "trivy" || name == "grype" || name == "osv-scanner"
 		if len(files) == 0 || dependency && len(dependencyFiles) == 0 {
 			coverage := report.Coverage{Unit: "files"}
@@ -684,7 +680,19 @@ func scan(
 		runErr,
 	)
 	output.Inventory = &inventory.Traversal
-	output.UncheckedInputs = coverageGaps(inventory, selection, output.Scanners)
+	gapInventory := inventory
+	if len(scopePaths) > 0 {
+		output.Scope = &report.Scope{Paths: scopePaths, SelectedFiles: len(scopedInventory.Files)}
+		for i := range output.Scanners {
+			source, mode := inventory, "repository"
+			if fileScopedScanner(output.Scanners[i].Name) {
+				source, mode = scopedInventory, "files"
+			}
+			output.Scanners[i].Scope = &report.ScannerScope{Mode: mode, CandidateFiles: len(inputsForScanner(output.Scanners[i].Name, source))}
+		}
+		gapInventory = scopedCoverageInventory(inventory, scopedInventory, selection)
+	}
+	output.UncheckedInputs = coverageGaps(gapInventory, selection, output.Scanners)
 	return output, err
 }
 

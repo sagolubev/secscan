@@ -113,11 +113,15 @@ func SARIF(input Report) ([]byte, error) {
 	if len(view.UncheckedInputs) > 0 {
 		notifications = append(notifications, map[string]any{"level": "warning", "message": map[string]any{"text": "Some discovered inputs have no confirmed analysis; inspect uncheckedInputs"}})
 	}
+	properties := map[string]any{"scanners": view.Scanners, "inventory": view.Inventory, "uncheckedInputs": view.UncheckedInputs, "exclusions": view.Exclusions}
+	if view.Scope != nil {
+		properties["scope"] = view.Scope
+	}
 	run := map[string]any{
 		"tool":        map[string]any{"driver": map[string]any{"name": "secscan", "rules": rules}},
 		"results":     results,
 		"invocations": []any{map[string]any{"executionSuccessful": success, "toolExecutionNotifications": notifications}},
-		"properties":  map[string]any{"scanners": view.Scanners, "inventory": view.Inventory, "uncheckedInputs": view.UncheckedInputs, "exclusions": view.Exclusions},
+		"properties":  properties,
 	}
 	return json.Marshal(map[string]any{"version": "2.1.0", "$schema": "https://json.schemastore.org/sarif-2.1.0.json", "runs": []any{run}})
 }
@@ -165,9 +169,10 @@ const htmlDocument = `<!doctype html>
 <section class="summary" aria-label="Summary"><div class="metric"><strong>{{len .Findings}}</strong><span>Visible findings</span></div><div class="metric"><strong>{{len .Scanners}}</strong><span>Scanner outcomes</span></div><div class="metric"><strong>{{len .UncheckedInputs}}</strong><span>Inputs without confirmed analysis</span></div></section>
 <p class="muted">Finding counts do not measure coverage. Review scanner outcomes and unchecked inputs before drawing conclusions.</p>
 {{if .Baseline}}<p>Baseline comparison: {{.Baseline.New}} new, {{.Baseline.Expanded}} expanded, {{.Baseline.Unchanged}} unchanged, {{.Baseline.Exempt}} exempt.</p>{{end}}
+{{if .Scope}}<p>Requested paths: <code>{{join .Scope.Paths ", "}}</code> · {{.Scope.SelectedFiles}} eligible files. Scanners marked repository retain full context.</p>{{end}}
 {{if .Filtering}}<section><h2>Applied filters</h2><p>{{.Filtering.InputFindings}} original findings; {{.Filtering.OutputFragments}} visible fragments. Counts below show removed elements.</p><div class="table-wrap"><table><thead><tr><th>Stage</th><th>Findings</th><th>Places</th><th>Advisories</th><th>Occurrences</th></tr></thead><tbody>{{range .Filtering.Stages}}<tr><td>{{.Name}}{{if .RuleID}} / {{.RuleID}}{{end}}</td><td>{{.Findings}}</td><td>{{.Places}}</td><td>{{.Advisories}}</td><td>{{.Occurrences}}</td></tr>{{end}}</tbody></table></div></section>{{end}}
-<section><h2>Scanner coverage</h2><div class="table-wrap"><table><thead><tr><th>Scanner</th><th>Status</th><th>Read</th><th>Failed</th><th>Evidence</th></tr></thead><tbody>
-{{range .Scanners}}<tr><td>{{.Name}}</td><td>{{.Status}}</td><td>{{.Coverage.Read}} {{.Coverage.Unit}}</td><td>{{.Coverage.Failed}}</td><td>{{range .Limitations}}<p>{{.}}</p>{{end}}<details><summary>Inspect coverage</summary><pre>{{json .}}</pre></details></td></tr>{{else}}<tr><td colspan="5">No scanner evidence is available.</td></tr>{{end}}
+<section><h2>Scanner coverage</h2><div class="table-wrap"><table><thead><tr><th>Scanner</th><th>Status</th><th>Scope</th><th>Read</th><th>Failed</th><th>Evidence</th></tr></thead><tbody>
+{{range .Scanners}}<tr><td>{{.Name}}</td><td>{{.Status}}</td><td>{{if .Scope}}{{.Scope.Mode}} ({{.Scope.CandidateFiles}} candidates){{else}}repository{{end}}</td><td>{{.Coverage.Read}} {{.Coverage.Unit}}</td><td>{{.Coverage.Failed}}</td><td>{{range .Limitations}}<p>{{.}}</p>{{end}}<details><summary>Inspect coverage</summary><pre>{{json .}}</pre></details></td></tr>{{else}}<tr><td colspan="6">No scanner evidence is available.</td></tr>{{end}}
 </tbody></table></div></section>
 {{if .UncheckedInputs}}<section><h2>Unchecked inputs</h2><ul>{{range .UncheckedInputs}}<li><code>{{.Path}}</code> — {{.Category}} / {{.Format}}: {{.Reason}}</li>{{end}}</ul></section>{{end}}
 {{if .Inventory}}<section><h2>Input inventory</h2><p>{{.Inventory.Tracked.Files}} tracked, {{.Inventory.Untracked.Files}} untracked, {{.Inventory.Ignored.Files}} ignored files.</p><details><summary>Inspect directories and omissions</summary><pre>{{json .Inventory}}</pre></details></section>{{end}}

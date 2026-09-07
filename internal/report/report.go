@@ -1,7 +1,7 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Normalize scanner findings and encode the canonical JSON report.
 // SCOPE: Keep deterministic identities and ordering; preserve source coverage independently of findings.
-// DEPENDS: internal/report/inventory.go, internal/report/trivy.go, internal/report/filter.go
+// DEPENDS: internal/report/inventory.go, internal/report/trivy.go, internal/report/filter.go, internal/report/scope.go
 // LINKS: openspec/changes/build-secscan/trace.json, internal/report/report_test.go#TestMarshalSortsFindings, internal/report/report_test.go#TestDependencyAliasMergeTransitiveAndStable
 // ROLE: RUNTIME
 // MAP_MODE: EXPORTS
@@ -34,6 +34,7 @@ import (
 )
 
 type Report struct {
+	Scope           *Scope           `json:"scope,omitempty"`
 	Filtering       *FilterSummary   `json:"filtering,omitempty"`
 	Baseline        *BaselineSummary `json:"baseline,omitempty"`
 	Inventory       *Inventory       `json:"inventory,omitempty"`
@@ -64,6 +65,7 @@ type Image struct {
 }
 
 type Scanner struct {
+	Scope          *ScannerScope `json:"scope,omitempty"`
 	TrivyReports   *TrivyReports `json:"-"`
 	Engines        []Engine      `json:"engines,omitempty"`
 	Images         []Image       `json:"images,omitempty"`

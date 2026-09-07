@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh | \
-  sh -s -- --version v0.3.0 --dir "$HOME/.local/bin"
+  sh -s -- --version v0.4.0 --dir "$HOME/.local/bin"
 ```
 
 Если `~/.local/bin` ещё не входит в PATH, добавьте его в текущем терминале:
@@ -43,7 +43,7 @@ secscan --version
 <details>
 <summary>Ручная установка без скрипта</summary>
 
-В [релизе v0.3.0](https://github.com/sagolubev/secscan/releases/tag/v0.3.0)
+В [релизе v0.4.0](https://github.com/sagolubev/secscan/releases/tag/v0.4.0)
 выберите файл для своей системы:
 
 | Система | Процессор | Файл |
@@ -60,7 +60,7 @@ secscan --version
 Для другой системы замените значение `asset` по таблице.
 
 ```sh
-version=v0.3.0
+version=v0.4.0
 asset=secscan-darwin-arm64
 release="https://github.com/sagolubev/secscan/releases/download/$version"
 curl -fL "$release/$asset" -o "$asset"
@@ -89,7 +89,7 @@ secscan --version
 ```
 
 Добавьте строку `export PATH=...` в `~/.zshrc` или `~/.bashrc`, чтобы команда
-была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.3.0`.
+была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.4.0`.
 
 `secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
 Оба информационных флага работают без Git-репозитория и Docker.
@@ -157,6 +157,33 @@ secscan --scanners oci-images --scan-images /path/to/repository > /tmp/secscan-i
 Secscan экспортирует их для Trivy и Grype, но не запускает.
 После проверки он удаляет только образы, которые загрузил сам.
 Уже существовавшие образы сохраняются.
+
+## Отдельные файлы и каталоги
+
+`--scope` выбирает файл или каталог относительно корня Git-репозитория:
+
+```sh
+secscan --scope src --scope scripts/check.py \
+  --scanners gitleaks,python-sast,typescript-sast \
+  /path/to/repository > /tmp/secscan-scoped.json
+```
+
+Можно передать до 16 scopes. Пересечения не дублируют файлы. Используйте имена
+в том написании, в котором они находятся в Git inventory. `.` выбирает все
+eligible files. Абсолютные пути, `..`, symlinks, отсутствующие пути и scope
+без подходящих nonignored regular files дают ошибку.
+
+Gitleaks, Python/TypeScript, Semgrep и Zizmor получают только выбранные входы.
+Остальные сканеры сохраняют полный контекст репозитория. Например, Trivy может
+вернуть finding из lockfile вне выбранного каталога — её путь не меняется.
+
+`scope.paths` и `scope.selectedFiles` описывают выбор. В `scanners[].scope`
+поле `mode` равно `files` или `repository`, а `candidateFiles` считает входные
+кандидаты. Это не подтверждение чтения: его по-прежнему показывает coverage.
+Inventory описывает всё рабочее дерево. HTML и SARIF сохраняют эти границы.
+
+Scopes несовместимы с `update`, `--baseline` и `--write-baseline`; эти сочетания
+дают exit code `2`. Project-фильтры можно применять к scoped scan обычным способом.
 
 ## Dependency-Track и SonarQube
 
@@ -397,7 +424,7 @@ Gradle-проверки читают статические координаты
 но не проверяет доступность новых версий. GitLab includes не загружаются.
 Gitleaks проверяет рабочее дерево, а не историю Git.
 
-Пока нет сканирования выбранных файлов и LLM-анализа. Podman и rootless остаются
+Пока нет LLM-анализа, token budget и пользовательских пакетов правил. Podman и rootless остаются
 непроверенными режимами. [Историческое сравнение с DietSec](docs/feature-status.md)
 описывает commit `c406ed3` от 6 сентября 2026 года. Текущие возможности описаны
 выше, актуальный остаток требований и задачи находятся в OpenSpec и Beads.

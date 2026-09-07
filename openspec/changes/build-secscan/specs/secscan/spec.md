@@ -256,6 +256,8 @@
 #### Scenario: Narrowed scanner
 - **WHEN** scanner поддерживает target filtering
 - **THEN** ему передаются только выбранные tracked и untracked files
+- **AND** --scope принимает до 16 относительных Git paths; invalid, symlink, missing или не выбирающий eligible files scope отклоняется без ложного clean result
+- **AND** пересечения scopes не дублируют inputs, а report раскрывает requested paths и фактическую область каждого scanner
 
 #### Scenario: Whole-repository scanner
 - **WHEN** scanner не поддерживает безопасный scope
@@ -265,6 +267,7 @@
 #### Scenario: Scope and baseline conflict
 - **WHEN** пользователь одновременно запрашивает scoped scan и baseline operation
 - **THEN** CLI отклоняет комбинацию как usage error
+- **AND** update также отклоняет --scope
 
 ### Requirement: Reproducibility
 

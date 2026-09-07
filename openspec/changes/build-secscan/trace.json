@@ -3,21 +3,19 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.19",
-  "baselineCommit": "0cc6c8d27bbb509a62e2a12ef3745e5e43437f25",
+  "targetOutcome": "secscan-ij8.20",
+  "baselineCommit": "96de56a8a3b876e12947fc7c68726e60da0089cc",
   "scope": {
     "implementation": [
-      "internal/filter/",
+      "internal/discovery/scopes.go",
+      "internal/discovery/scopes_test.go",
       "internal/report/report.go",
-      "internal/report/filter.go",
+      "internal/report/scope.go",
       "internal/report/render.go",
       "internal/report/render_test.go",
-      "internal/baseline/baseline.go",
-      "internal/baseline/baseline_test.go",
       "cmd/secscan/main.go",
-      "cmd/secscan/main_test.go",
-      "cmd/secscan/config.go",
-      "cmd/secscan/config_test.go"
+      "cmd/secscan/scope.go",
+      "cmd/secscan/scope_test.go"
     ],
     "governance": [
       "README.md",
@@ -285,20 +283,44 @@
     {
       "requirement": "Scoped scans",
       "scenario": "Narrowed scanner",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.20"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/scopes.go",
+        "cmd/secscan/scope.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/discovery/scopes_test.go",
+        "cmd/secscan/scope_test.go"
+      ]
     },
     {
       "requirement": "Scoped scans",
       "scenario": "Whole-repository scanner",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.20"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/scopes.go",
+        "cmd/secscan/scope.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/discovery/scopes_test.go",
+        "cmd/secscan/scope_test.go"
+      ]
     },
     {
       "requirement": "Scoped scans",
       "scenario": "Scope and baseline conflict",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.20"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/scopes.go",
+        "cmd/secscan/scope.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/discovery/scopes_test.go",
+        "cmd/secscan/scope_test.go"
+      ]
     },
     {
       "requirement": "Reproducibility",
@@ -1131,12 +1153,11 @@
     ],
     "target": [
       {
-        "name": "filter-focused",
+        "name": "scope-focused",
         "argv": [
           "go",
           "test",
-          "./internal/filter",
-          "./internal/baseline",
+          "./internal/discovery",
           "./internal/report",
           "./cmd/secscan",
           "-count=1"

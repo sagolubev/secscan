@@ -1,3 +1,18 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify complete SARIF evidence and escaped offline HTML.
+// SCOPE: Synthetic hostile text, location boundaries, immutable inputs and scope provenance.
+// DEPENDS: internal/report/render.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-report-rendering
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestSARIFRetainsEvidence - Preserve canonical findings, provenance and analysis gaps.
+// TestSARIFRejectsUnsafeLocationsAndFilteredInput - Reject unsafe or partial input contracts.
+// TestHTMLContainsEscapedDataAndCoverage - Keep untrusted markup inert and coverage visible.
+// TestSARIFRetainsScope - Preserve requested paths and per-scanner scope modes.
+// END_MODULE_MAP
+
 package report
 
 import (
@@ -110,5 +125,28 @@ func TestHTMLContainsEscapedDataAndCoverage(t *testing.T) {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("HTML missing %q", want)
 		}
+	}
+}
+
+func TestSARIFRetainsScope(t *testing.T) {
+	input := Report{Scope: &Scope{Paths: []string{"src"}, SelectedFiles: 2}, Scanners: []Scanner{{Name: "trivy", Status: "success", Scope: &ScannerScope{Mode: "repository", CandidateFiles: 3}}}}
+	data, err := SARIF(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Runs []struct {
+			Properties struct {
+				Scope    *Scope
+				Scanners []Scanner
+			}
+		}
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	properties := document.Runs[0].Properties
+	if properties.Scope == nil || properties.Scope.SelectedFiles != 2 || len(properties.Scope.Paths) != 1 || properties.Scope.Paths[0] != "src" || properties.Scanners[0].Scope.Mode != "repository" {
+		t.Fatalf("SARIF scope lost: %s", data)
 	}
 }
