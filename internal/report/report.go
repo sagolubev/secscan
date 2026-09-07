@@ -141,6 +141,10 @@ type Finding struct {
 }
 
 func Marshal(input Report) ([]byte, error) {
+	return json.Marshal(canonicalReport(input))
+}
+
+func canonicalReport(input Report) Report {
 	result := input
 	if input.Baseline == nil {
 		result.Findings = Normalize(input.Findings)
@@ -168,7 +172,7 @@ func Marshal(input Report) ([]byte, error) {
 		}
 		return left.Line < right.Line
 	})
-	return json.Marshal(result)
+	return result
 }
 
 // Normalize merges connected advisory aliases for the same package version.

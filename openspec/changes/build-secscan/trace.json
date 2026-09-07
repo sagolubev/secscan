@@ -3,14 +3,24 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.17",
-  "baselineCommit": "561d7a5a7d806e713e1809e69a3b739538354abe",
+  "targetOutcome": "secscan-ij8.18",
+  "baselineCommit": "88e8acb5186395aa0989e3e28dfbc1c15a3f7fc9",
   "scope": {
     "implementation": [
-      "internal/container/cancellation_test.go"
+      "internal/report/",
+      "cmd/secscan/main.go",
+      "cmd/secscan/baseline.go",
+      "cmd/secscan/output.go",
+      "cmd/secscan/render.go",
+      "cmd/secscan/render_test.go"
     ],
     "governance": [
-      "openspec/changes/build-secscan/trace.json"
+      "README.md",
+      "openspec/changes/build-secscan/trace.json",
+      "openspec/changes/build-secscan/proposal.md",
+      "openspec/changes/build-secscan/design.md",
+      "openspec/changes/build-secscan/specs/secscan/spec.md",
+      "openspec/changes/build-secscan/.stale.json"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -54,7 +64,7 @@
       "requirement": "Container runtime",
       "scenario": "Rootless runtime",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.24"
     },
     {
       "requirement": "Container runtime",
@@ -144,7 +154,7 @@
       "requirement": "Canonical finding model",
       "scenario": "Finding origin",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.22"
     },
     {
       "requirement": "Honest coverage",
@@ -203,13 +213,13 @@
       "requirement": "Filtering and suppressions",
       "scenario": "Strict project configuration",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.19"
     },
     {
       "requirement": "Filtering and suppressions",
       "scenario": "Suppression accounting",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.19"
     },
     {
       "requirement": "Baselines",
@@ -254,19 +264,19 @@
       "requirement": "Scoped scans",
       "scenario": "Narrowed scanner",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.20"
     },
     {
       "requirement": "Scoped scans",
       "scenario": "Whole-repository scanner",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.20"
     },
     {
       "requirement": "Scoped scans",
       "scenario": "Scope and baseline conflict",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.20"
     },
     {
       "requirement": "Reproducibility",
@@ -286,7 +296,7 @@
       "requirement": "Reproducibility",
       "scenario": "Cached rules",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.23"
     },
     {
       "requirement": "Reproducibility",
@@ -327,38 +337,52 @@
     {
       "requirement": "Report rendering",
       "scenario": "HTML safety",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/report/render.go",
+        "cmd/secscan/render.go"
+      ],
+      "tests": [
+        "internal/report/render_test.go",
+        "cmd/secscan/render_test.go"
+      ]
     },
     {
       "requirement": "Report rendering",
       "scenario": "SARIF completeness",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/report/render.go",
+        "cmd/secscan/render.go"
+      ],
+      "tests": [
+        "internal/report/render_test.go",
+        "cmd/secscan/render_test.go"
+      ]
     },
     {
       "requirement": "Report rendering",
       "scenario": "Token budget",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.21"
     },
     {
       "requirement": "LLM analysis",
       "scenario": "Untrusted repository",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.26"
     },
     {
       "requirement": "LLM analysis",
       "scenario": "Credential isolation",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.26"
     },
     {
       "requirement": "LLM analysis",
       "scenario": "LLM failure",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.26"
     },
     {
       "requirement": "Supported environments",
@@ -375,7 +399,7 @@
       "requirement": "Supported environments",
       "scenario": "Unsupported host",
       "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "issue": "secscan-ij8.25"
     },
     {
       "requirement": "Development traceability",
@@ -1026,6 +1050,19 @@
         "internal/discovery/discovery_test.go",
         "internal/baseline/baseline_test.go"
       ]
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "Report publication",
+      "disposition": "target",
+      "components": [
+        "cmd/secscan/output.go",
+        "cmd/secscan/render.go"
+      ],
+      "tests": [
+        "cmd/secscan/render_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1058,17 +1095,13 @@
     ],
     "target": [
       {
-        "name": "cancellation",
+        "name": "render-focused",
         "argv": [
           "go",
           "test",
-          "./internal/container",
-          "-run",
-          "TestAcceptanceCancellation",
+          "./internal/report",
+          "./cmd/secscan",
           "-count=1"
-        ],
-        "env": [
-          "SECSCAN_ACCEPTANCE=1"
         ]
       }
     ],

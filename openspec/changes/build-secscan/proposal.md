@@ -66,6 +66,17 @@ excluded from scanner staging and disclosed in traversal metadata. Existing
 Trivy integration exports remain unfiltered. Filesystem publication and decoder
 validation must preserve the current trust boundary.
 
+## Reports, project filtering and scopes
+
+The next delivery sequence is cancellation-test reliability, offline HTML and
+full SARIF export, declarative project suppressions, then explicit file/directory
+scopes. Keep JSON stdout, unfiltered baseline snapshots and Trivy exports
+compatible. Reuse the verified pinned-directory file publication boundary.
+HTML/SARIF is the vertical report outcome; filtering must preserve both the
+complete scan and the visible report. Scopes must state which scanners actually
+narrowed their inputs. Token budgets, Git history, custom cached rules, broader
+runtime coverage and LLM annotation remain separate backlog outcomes.
+
 ## Capabilities
 
 ### New Capabilities

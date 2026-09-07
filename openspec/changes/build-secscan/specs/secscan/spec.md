@@ -310,6 +310,15 @@
 - **THEN** SARIF содержит полный unfiltered canonical result set
 - **AND** coverage limitations сохраняются в run properties и notifications
 
+#### Scenario: Report publication
+- **WHEN** пользователь передаёт --html FILE или --sarif FILE для scan
+- **THEN** JSON stdout сохраняется, HTML показывает видимый report, а SARIF содержит unfiltered findings
+- **AND** output публикуется как новый полный файл в заранее открытом parent directory без замены существующих files или symlinks
+- **AND** output внутри worktree исключается как control file до scanner staging
+- **AND** ошибка render/write сохраняет JSON и даёт exit1; attempted failed scan сохраняет failed coverage и exit1
+- **WHEN** output flag пуст или передан для update
+- **THEN** команда возвращает usage exit code 2 до запуска scanners
+
 #### Scenario: Token budget
 - **WHEN** JSON превышает `--max-tokens`
 - **THEN** secscan применяет документированный deterministic filter policy

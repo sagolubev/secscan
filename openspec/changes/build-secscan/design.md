@@ -25,7 +25,7 @@ repo-local verifier и не создаёт второй lifecycle.
 - Выдавать `baseline`, `target` и `final` evidence, привязанное к Git-состоянию.
 - Проверять полный changed-file set относительно declared scope.
 
-**Non-Goals:**
+**Non-Goals for the initial walking skeleton (later outcomes extend it):**
 
 - HTML, SARIF, product baselines, suppressions и LLM analysis.
 - Универсальный workflow framework или совместимость с GRACE CLI.
@@ -651,3 +651,47 @@ produce a successful baseline write; partial coverage is retained in the report
 and never becomes proof of absence. Exemption and new/expanded behavior get
 focused tests plus a CLI acceptance fixture. Comparison never mutates input
 findings or stored snapshots. Existing JSON v1 changes are additive.
+
+## Offline HTML and complete SARIF
+
+Add --html FILE and --sarif FILE without changing JSON stdout. Both flags may
+be combined with baseline comparison. HTML renders the visible result; SARIF
+always receives the complete unfiltered scan. Coverage, scanner limitations,
+inventory and operational failures remain visible even with zero findings.
+An attempted failed scan may still produce these reports, with exit1 preserved.
+Update rejects the flags. Invalid or existing destinations fail before scanning.
+All output flags share a collision check. Group destinations by opened-parent
+identity, then test their names in a private sibling directory so native case
+and Unicode aliases are rejected without creating any requested output. Remove
+the owned probe before scanner discovery; no new normalization library is needed.
+
+Use html/template and encoding/json from the standard library. The reviewed
+local Trivy and SEC-AF cards describe broader scanner platforms, not a suitable
+canonical-report library. Reuse this codebase's normalized Report instead of
+adding their runtimes. A static HTML document uses semantic headings/tables,
+native details, embedded CSS and CSP; no scripts, remote assets, source snippets
+or executable links. Escape all data through templates. Keep complete findings
+and evidence, using native browser search and print rather than a JS application.
+
+SARIF 2.1.0 has one secscan run, deterministically ordered rules/results,
+repository-relative URI-encoded locations and existing stable fingerprints.
+Keep canonical package/advisory/source/image fields as result properties and
+full coverage as run properties. Emit explicit invocation notifications for
+failed/skipped/incomplete analysis. Omit unknown regions rather than inventing
+lines; reject invalid canonical paths or line ranges. Validate a generated file
+against the OASIS 2.1.0 schema, in addition to focused mapping tests.
+
+Extract the existing baseline file destination into one shared concrete helper:
+pin the parent before scanning; create a private temporary file under os.Root;
+sync complete bytes and publish with Linkat without replacing an existing name.
+Baseline and report files use the same cancellation/cleanup boundary. Explicit
+in-worktree outputs are excluded control paths before staging. Rendering happens
+before publication; errors preserve JSON stdout and existing files. Multiple
+outputs are independent complete files, not a cross-file transaction.
+
+The report outcome owns internal/report renderers, CLI wiring/publication,
+README examples and trace links. It proves a real Python scan into JSON, HTML
+and schema-valid SARIF, including baseline-filtered HTML with full SARIF, hostile
+text, failed coverage, parent replacement and no-clobber behavior. Rollback is
+omitting the additive flags or reverting the outcome commits. Standard feature
+artifacts and Comprehensive security/verification gates apply.

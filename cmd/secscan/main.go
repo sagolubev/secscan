@@ -79,6 +79,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	trivyReports := flags.String("trivy-reports", "", "write Trivy CycloneDX and SonarQube JSON to a new directory")
 	baselineInput := flags.String("baseline", "", "compare findings with a saved baseline")
 	baselineOutput := flags.String("write-baseline", "", "write unfiltered findings to a new baseline file")
+	htmlOutput := flags.String("html", "", "write the visible report to a new offline HTML file")
+	sarifOutput := flags.String("sarif", "", "write complete unfiltered findings to a new SARIF file")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -130,6 +132,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 
 	wantReports, readBaselineFlag, writeBaselineFlag := false, false, false
+	htmlFlag, sarifFlag := false, false
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "trivy-reports":
@@ -138,6 +141,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			readBaselineFlag = true
 		case "write-baseline":
 			writeBaselineFlag = true
+		case "html":
+			htmlFlag = true
+		case "sarif":
+			sarifFlag = true
 		}
 	})
 	var baselineOptions baselineRequest
@@ -160,6 +167,28 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			defer baselineOptions.output.close()
 		}
 	}
+	var renderedOutputs []renderedOutput
+	controlPaths := append([]string(nil), baselineOptions.excluded...)
+	if htmlFlag || sarifFlag {
+		if updating || htmlFlag && *htmlOutput == "" || sarifFlag && *sarifOutput == "" {
+			fmt.Fprintln(stderr, "--html and --sarif require a new file and cannot be used with update")
+			return 2
+		}
+		root, err := gitRoot(path)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		renderedOutputs, err = prepareRenderedOutputs(root, *htmlOutput, *sarifOutput)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		for _, output := range renderedOutputs {
+			defer output.destination.close()
+			controlPaths = append(controlPaths, output.destination.excluded...)
+		}
+	}
 	var destination *exportDestination
 	if wantReports {
 		if updating || *trivyReports == "" || !slices.Contains(selection, "trivy") {
@@ -177,6 +206,20 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			return 2
 		}
 		defer destination.parent.Close()
+	}
+	var outputNames []outputName
+	if baselineOptions.output != nil {
+		outputNames = append(outputNames, outputName{parent: baselineOptions.output.parent, name: baselineOptions.output.name})
+	}
+	for _, output := range renderedOutputs {
+		outputNames = append(outputNames, outputName{parent: output.destination.parent, name: output.destination.name})
+	}
+	if destination != nil {
+		outputNames = append(outputNames, outputName{parent: destination.parent, name: destination.name})
+	}
+	if err := validateOutputNames(outputNames); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
 
 	if updating {
@@ -219,7 +262,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, TrivyReports: wantReports, Excluded: baselineOptions.excluded}, reporter.Emit)
+	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, TrivyReports: wantReports, Excluded: controlPaths}, reporter.Emit)
 	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
 		fmt.Fprintln(stderr, scanErr)
@@ -254,6 +297,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if err := writeRenderedOutputs(ctx, renderedOutputs, result, unfiltered); err != nil {
+		fmt.Fprintln(stderr, err)
+		if scanErr != nil {
+			fmt.Fprintln(stderr, scanErr)
+		}
+		return 1
+	}
 	if scanErr != nil {
 		fmt.Fprintln(stderr, scanErr)
 		return 1
@@ -269,7 +319,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		}
 	}
 	if baselineOptions.output != nil {
-		if err := publishBaseline(ctx, baselineOptions.output, baselineData); err != nil {
+		if err := baselineOptions.output.write(ctx, baselineData); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
