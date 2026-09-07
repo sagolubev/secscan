@@ -1,9 +1,9 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Validate scope and run declared verification phases.
 // SCOPE: Check state before and after commands; validation-only never claims test success.
-// DEPENDS: cmd/tracecheck/main_test.go
+// DEPENDS: internal/tracecheck/evidence.go, internal/tracecheck/git.go, internal/tracecheck/tracecheck.go
 // LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
-// ROLE: RUNTIME
+// ROLE: SCRIPT
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
@@ -44,20 +44,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 	)
 	phase := flags.String("phase", "", "verification phase: baseline, target, or final")
 	runChecks := flags.Bool("run", false, "run the phase checks")
+	verifyEvidence := flags.Bool("verify-evidence", false, "verify the saved phase chain against current state without running checks")
 	validateOnly := flags.Bool("validate-only", false, "validate trace, scope, authority and staleness without running checks")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 	conflict := false
-	if *validateOnly {
+	if *validateOnly || *verifyEvidence {
 		flags.Visit(func(f *flag.Flag) {
-			if f.Name == "phase" || f.Name == "run" {
+			if f.Name == "phase" || f.Name == "run" || *verifyEvidence && f.Name == "validate-only" || *validateOnly && f.Name == "verify-evidence" {
 				conflict = true
 			}
 		})
 	}
-	if flags.NArg() != 0 || conflict || !*validateOnly && (!*runChecks || (*phase != "baseline" && *phase != "target" && *phase != "final")) {
-		fmt.Fprintln(stderr, "use --validate-only alone, or --phase baseline|target|final --run")
+	if flags.NArg() != 0 || conflict || !*validateOnly && !*verifyEvidence && (!*runChecks || (*phase != "baseline" && *phase != "target" && *phase != "final")) {
+		fmt.Fprintln(stderr, "use --validate-only, --verify-evidence, or --phase baseline|target|final --run")
 		return 2
 	}
 
@@ -71,7 +72,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if !*validateOnly && len(manifest.Checks[*phase]) == 0 {
+	if !*validateOnly && !*verifyEvidence && len(manifest.Checks[*phase]) == 0 {
 		fmt.Fprintf(stderr, "phase %q requires at least one check\n", *phase)
 		return 1
 	}
@@ -90,6 +91,38 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if err := phaseState(root, manifest, *phase, before.Changes); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+
+	records, err := tracecheck.LoadEvidence(root, manifest.TargetOutcome)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	nextPhase := *phase
+	if *verifyEvidence {
+		nextPhase = "verify"
+	}
+	previous, err := tracecheck.ValidateEvidenceChain(manifest, records, nextPhase, before.AuthorityHash, before.StateIdentity, time.Now().UTC())
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if *verifyEvidence {
+		reloaded, err := tracecheck.LoadRepositoryManifest(root, manifest.SourcePath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		after, err := validate(root, reloaded, true)
+		if err != nil || before.StateIdentity != after.StateIdentity || before.AuthorityHash != after.AuthorityHash {
+			fmt.Fprintln(stderr, "verification state changed while reading evidence")
+			return 1
+		}
+		if err := json.NewEncoder(stdout).Encode(previous); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	}
 
 	started := time.Now().UTC()
@@ -112,6 +145,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		ok = false
 	}
 	evidence := tracecheck.Evidence{
+		Previous:       previous.ID,
 		SchemaVersion:  "2",
 		StateAlgorithm: tracecheck.StateAlgorithm,
 		ManifestPath:   manifest.SourcePath,
@@ -128,6 +162,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		OK:             ok,
 	}
 	if err := evidence.Seal(); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := tracecheck.AppendEvidence(root, evidence); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

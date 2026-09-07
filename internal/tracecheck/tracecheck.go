@@ -1,7 +1,7 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Bind trace manifests to exact bytes and validate requirement references.
 // SCOPE: Bounded repository reads; structural references do not prove test sufficiency.
-// DEPENDS: internal/tracecheck/manifest_test.go
+// DEPENDS: internal/tracecheck/git.go
 // LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability
 // ROLE: RUNTIME
 // MAP_MODE: LOCALS
@@ -91,7 +91,7 @@ func LoadManifest(path string) (Manifest, error) {
 
 func decodeManifest(data []byte) (Manifest, error) {
 	var manifest Manifest
-	if err := uniqueJSON(json.NewDecoder(bytes.NewReader(data))); err != nil {
+	if err := uniqueJSON(json.NewDecoder(bytes.NewReader(data)), manifestKey); err != nil {
 		return manifest, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -188,7 +188,7 @@ func ReadRepositoryFile(root, path string) ([]byte, error) {
 }
 
 // Reject duplicate keys and case aliases that encoding/json otherwise accepts.
-func uniqueJSON(d *json.Decoder) error {
+func uniqueJSON(d *json.Decoder, validKey func(string) bool) error {
 	t, err := d.Token()
 	if err != nil {
 		return err
@@ -202,18 +202,18 @@ func uniqueJSON(d *json.Decoder) error {
 				return err
 			}
 			k := key.(string)
-			if !manifestKey(k) || seen[k] {
+			if !validKey(k) || seen[k] {
 				return fmt.Errorf("ambiguous JSON key %q", k)
 			}
 			seen[k] = true
-			if err := uniqueJSON(d); err != nil {
+			if err := uniqueJSON(d, validKey); err != nil {
 				return err
 			}
 		}
 		_, err = d.Token()
 	case json.Delim('['):
 		for d.More() {
-			if err := uniqueJSON(d); err != nil {
+			if err := uniqueJSON(d, validKey); err != nil {
 				return err
 			}
 		}

@@ -7,6 +7,9 @@
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
+// TestSavedEvidenceChainAndAppendFailure - Verify saved phases and fail closed on write errors.
+// TestPhaseRequiresSavedPredecessor - Block commands before baseline exists.
+// TestTaggedCommentsFailClosedAndIgnoreLegacy - Separate new evidence from historical data.
 // TestValidationBindsLoadedManifest - Different loaded check sets cannot share identity.
 // TestValidationRejectsUnresolvedDeferredIssue - Unknown deferred work fails validation.
 // TestPhaseRejectsMutationDuringChecks - Code, authority and manifest edits invalidate runs.
@@ -25,6 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagolubev/secscan/internal/tracecheck"
 )
@@ -106,6 +110,7 @@ func TestTracecheckRejectsConflictingModes(t *testing.T) {
 		{}, {"--validate-only", "--run"}, {"--validate-only", "--phase", "target"},
 		{"--validate-only", "--run=false"}, {"--validate-only", "--phase="},
 		{"--phase", "target"}, {"--run"}, {"--validate-only", "unexpected"},
+		{"--verify-evidence", "--run"}, {"--verify-evidence", "--phase", "final"}, {"--verify-evidence", "--validate-only"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != 2 || stdout.Len() != 0 {
@@ -164,7 +169,9 @@ func TestPhaseRequiresChecksAndPreservesSuccessfulEvidence(t *testing.T) {
 			if code := run(args, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
 				t.Fatalf("empty %s phase exit=%d stdout=%s stderr=%s", phase, code, &stdout, &stderr)
 			}
-			manifest.Checks[phase] = []tracecheck.Check{{Name: "pass", Argv: []string{os.Args[0], "-test.run=^TestPhaseCheckProcess$"}}}
+			for _, p := range []string{"baseline", "target", "final"} {
+				manifest.Checks[p] = []tracecheck.Check{{Name: "pass", Argv: []string{os.Args[0], "-test.run=^TestPhaseCheckProcess$"}}}
+			}
 			data, err = json.Marshal(manifest)
 			if err != nil {
 				t.Fatal(err)
@@ -173,6 +180,12 @@ func TestPhaseRequiresChecksAndPreservesSuccessfulEvidence(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 			stageFixture(t)
+			if phase != "baseline" {
+				runFixturePhase(t, path, "baseline")
+			}
+			if phase == "final" {
+				runFixturePhase(t, path, "target")
+			}
 			code := run(args, &stdout, &stderr)
 			var evidence tracecheck.Evidence
 			if code != 0 || json.Unmarshal(stdout.Bytes(), &evidence) != nil || !evidence.OK || evidence.Phase != phase || len(evidence.Checks) != 1 {
@@ -195,6 +208,7 @@ func TestPhaseRejectsMutationDuringChecks(t *testing.T) {
 			}
 			writeFixture(t, manifest, bytes.ReplaceAll(data, []byte("TRACECHECK_TEST_ACTION=marker"), []byte("TRACECHECK_TEST_ACTION="+action)))
 			stageFixture(t)
+			runFixturePhase(t, manifest, "baseline")
 			var stdout, stderr bytes.Buffer
 			code := run([]string{"--manifest", manifest, "--phase", "target", "--run"}, &stdout, &stderr)
 			var evidence tracecheck.Evidence
@@ -305,6 +319,7 @@ func traceFixture(t *testing.T) (string, string) {
 		Traces: []tracecheck.Trace{{ScenarioRef: tracecheck.ScenarioRef{Requirement: "Example", Scenario: "Example"}, Disposition: "target", Components: []string{"source.go"}, Tests: []string{"source_test.go"}}},
 		Checks: map[string][]tracecheck.Check{"target": {{Name: "synthetic", Argv: []string{os.Args[0], "-test.run=^TestPhaseCheckProcess$"}, Env: []string{"TRACECHECK_TEST_ACTION=marker"}}}},
 	}
+	manifest.Checks["baseline"] = []tracecheck.Check{{Name: "baseline", Argv: []string{os.Args[0], "-test.run=^TestPhaseCheckProcess$"}}}
 	encoded, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -314,11 +329,13 @@ func traceFixture(t *testing.T) (string, string) {
 	bin := t.TempDir()
 	issue := filepath.Join(bin, "issue.json")
 	writeFixture(t, issue, []byte(`[{"id":"test.1","parent":"test","title":"fixture"}]`))
-	writeFixture(t, filepath.Join(bin, "br"), []byte("#!/bin/sh\ncat \"$TRACECHECK_TEST_ISSUE\"\n"))
+	writeFixture(t, filepath.Join(bin, "br"), []byte("#!/bin/sh\nexec \"$TRACECHECK_TEST_BINARY\" -test.run=^TestBeadsProcess$ -- \"$@\"\n"))
 	if err := os.Chmod(filepath.Join(bin, "br"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TRACECHECK_TEST_ISSUE", issue)
+	t.Setenv("TRACECHECK_TEST_BINARY", os.Args[0])
+	t.Setenv("TRACECHECK_TEST_COMMENTS", filepath.Join(bin, "comments.json"))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return root, manifestPath
 }
@@ -330,5 +347,159 @@ func writeFixture(t *testing.T, path string, data []byte) {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func runFixturePhase(t *testing.T, path, phase string) tracecheck.Evidence {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", path, "--phase", phase, "--run"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("phase %s exit=%d stderr=%s", phase, code, &stderr)
+	}
+	var evidence tracecheck.Evidence
+	if err := json.Unmarshal(stdout.Bytes(), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	return evidence
+}
+
+func TestPhaseRequiresSavedPredecessor(t *testing.T) {
+	root, path := traceFixture(t)
+	stageFixture(t)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", path, "--phase", "target", "--run"}, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
+		t.Errorf("target without baseline exit=%d output=%s stderr=%s", code, &stdout, &stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "ran-check")); !os.IsNotExist(err) {
+		t.Error("check ran without predecessor")
+	}
+}
+
+func TestSavedEvidenceChainAndAppendFailure(t *testing.T) {
+	root, path := traceFixture(t)
+	m, err := tracecheck.LoadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{"baseline", "target", "final"} {
+		m.Checks[phase] = m.Checks["baseline"]
+	}
+	data, _ := json.Marshal(m)
+	writeFixture(t, path, data)
+	stageFixture(t)
+	baseline := runFixturePhase(t, path, "baseline")
+	target := runFixturePhase(t, path, "target")
+	final := runFixturePhase(t, path, "final")
+	if target.Previous != baseline.ID || final.Previous != target.ID {
+		t.Fatal("phase links missing")
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", path, "--verify-evidence"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("verify exit=%d stderr=%s", code, &stderr)
+	}
+	var verified tracecheck.Evidence
+	if json.Unmarshal(stdout.Bytes(), &verified) != nil || verified.ID != final.ID {
+		t.Fatalf("verify returned wrong final: %s", &stdout)
+	}
+	records, err := tracecheck.LoadEvidence(root, "test.1")
+	if err != nil || len(records) != 3 {
+		t.Fatalf("saved records=%d err=%v", len(records), err)
+	}
+	t.Setenv("TRACECHECK_TEST_APPEND_FAIL", "1")
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--manifest", path, "--phase", "target", "--run"}, &stdout, &stderr); code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "append") {
+		t.Fatalf("append failure exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+	}
+	t.Setenv("TRACECHECK_TEST_APPEND_FAIL", "")
+	writeFixture(t, filepath.Join(root, "source.go"), []byte("package changed\n"))
+	stageFixture(t)
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"--manifest", path, "--verify-evidence"}, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
+		t.Errorf("stale chain exit=%d output=%s stderr=%s", code, &stdout, &stderr)
+	}
+}
+
+func TestBeadsProcess(t *testing.T) {
+	index := 0
+	for i, arg := range os.Args {
+		if arg == "--" {
+			index = i + 1
+			break
+		}
+	}
+	if index == 0 {
+		return
+	}
+	args := os.Args[index:]
+	if len(args) > 0 && args[0] == "show" {
+		data, err := os.ReadFile(os.Getenv("TRACECHECK_TEST_ISSUE"))
+		if err != nil {
+			os.Exit(4)
+		}
+		os.Stdout.Write(data)
+		os.Exit(0)
+	}
+	type comment struct {
+		ID        int       `json:"id"`
+		IssueID   string    `json:"issue_id"`
+		Text      string    `json:"text"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	var comments []comment
+	file := os.Getenv("TRACECHECK_TEST_COMMENTS")
+	data, _ := os.ReadFile(file)
+	if len(data) > 0 && json.Unmarshal(data, &comments) != nil {
+		os.Exit(4)
+	}
+	if len(args) < 3 || args[0] != "comments" {
+		os.Exit(4)
+	}
+	switch args[1] {
+	case "list":
+		json.NewEncoder(os.Stdout).Encode(comments)
+	case "add":
+		if os.Getenv("TRACECHECK_TEST_APPEND_FAIL") == "1" {
+			os.Exit(7)
+		}
+		if len(args) < 5 || args[3] != "--file" {
+			os.Exit(4)
+		}
+		info, err := os.Stat(args[4])
+		if err != nil || info.Mode().Perm() != 0600 {
+			os.Exit(4)
+		}
+		body, err := os.ReadFile(args[4])
+		if err != nil {
+			os.Exit(4)
+		}
+		comments = append(comments, comment{ID: len(comments) + 1, IssueID: args[2], Text: string(body), CreatedAt: time.Now().UTC()})
+		encoded, _ := json.Marshal(comments)
+		if os.WriteFile(file, encoded, 0600) != nil {
+			os.Exit(4)
+		}
+	default:
+		os.Exit(4)
+	}
+	os.Exit(0)
+}
+
+func TestTaggedCommentsFailClosedAndIgnoreLegacy(t *testing.T) {
+	root, path := traceFixture(t)
+	stageFixture(t)
+	comment := map[string]any{"id": 1, "issue_id": "test.1", "created_at": time.Now().UTC(), "text": "<!-- secscan:tracecheck:legacy -->\ninvalid historical data"}
+	data, _ := json.Marshal([]any{comment})
+	writeFixture(t, os.Getenv("TRACECHECK_TEST_COMMENTS"), data)
+	records, err := tracecheck.LoadEvidence(root, "test.1")
+	if err != nil || len(records) != 0 {
+		t.Fatalf("legacy records=%d error=%v", len(records), err)
+	}
+	comment["text"] = "<!-- secscan:tracecheck:v2 -->\n{}"
+	data, _ = json.Marshal([]any{comment})
+	writeFixture(t, os.Getenv("TRACECHECK_TEST_COMMENTS"), data)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--manifest", path, "--phase", "baseline", "--run"}, &stdout, &stderr); code != 1 || stdout.Len() != 0 {
+		t.Errorf("malformed tagged baseline exit=%d output=%s stderr=%s", code, &stdout, &stderr)
 	}
 }
