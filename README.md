@@ -228,6 +228,23 @@ jq '.findings[] | {kind, severity, ruleId, path, line, sources}' /tmp/secscan-re
 `coverage.read`, `coverage.failed`, `unreadInputs`, `failedInputs` и `limitations`.
 Значения секретов и фрагменты исходного кода в отчёт не попадают.
 
+`inventory` отделяет eligible tracked/untracked файлы от ignored и omitted.
+В каждой группе есть число файлов, байты и счётчики по каталогам.
+Строка каталога считает только его непосредственные файлы, без вложенных,
+поэтому суммы не дублируются. Symlinks, исчезнувшие и non-regular inputs
+перечислены с причиной. `unclassified` содержит файлы без известной категории.
+Это учёт входов, а не доказательство анализа.
+
+`uncheckedInputs` перечисляет известные code/dependency inputs без подходящего
+сканера, без выбранной проверки или без положительного read evidence.
+Проверка секретов не считается SAST/SCA. Gitleaks получает тот же набор
+nonignored regular files, но сообщает завершение на уровне репозитория.
+Python/TypeScript считают только пути, подтверждённые Opengrep.
+
+```sh
+jq '{inventory, uncheckedInputs}' /tmp/secscan-report.json
+```
+
 | Код завершения | Значение |
 |---|---|
 | `0` | Хотя бы один сканер успешен, либо все выбранные проверки пропущены из-за отсутствия подходящих файлов |
@@ -292,6 +309,8 @@ macOS, контейнерные тесты на Linux amd64/arm64 и сборк�
 [br 0.2.19](https://github.com/Dicklesworthstone/beads_rust/releases/tag/v0.2.19).
 
 Перед изменением прочитайте [AGENTS.md](AGENTS.md), связанную задачу и design.
+В ключевых Go-файлах есть GRACE contract/map: назначение, ограничения, символы
+и ссылки на тесты. [Правила навигации](docs/code-navigation.md) объясняют разметку.
 Для нового поведения сначала получите падающий тест, затем внесите изменение.
 До реализации задайте в [trace.json](openspec/changes/build-secscan/trace.json)
 задачу `targetOutcome`, исходный `baselineCommit` и ожидаемые файлы `scope`.

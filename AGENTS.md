@@ -42,6 +42,10 @@ OpenSpec и Beads остаются авторитетными; `.grace` не с�
 Trace metadata содержит только ссылки и команды. Не копируй в него текст
 требований, дизайн или задачи.
 
+При изменении ключевого Go-модуля читай и поддерживай его GRACE contract/map.
+Формат и условия применения: [docs/code-navigation.md](docs/code-navigation.md).
+Ссылки ведут в OpenSpec и tests; task status и evidence остаются в Beads.
+
 ## Go
 
 - Используй Go standard library, пока она удовлетворяет требованию.

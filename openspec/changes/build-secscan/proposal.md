@@ -49,6 +49,23 @@ use sudo, edit shell profiles or change the release asset set. This single
 outcome includes installer tests on Linux/macOS and a real published-binary
 installation check; the existing feature profile and verification depth apply.
 
+## Coverage and product baselines
+
+Complete traversal disclosure with eligible tracked/untracked/ignored file and
+byte counts, directory summaries and explicit omissions. Report known code and
+dependency inputs without a successful applicable analysis, and disclose
+unclassified files. Give Gitleaks the same safe nonignored staged inventory as
+other filesystem scanners. Add concise GRACE module maps and boundary contracts
+in changed code, linked to the existing OpenSpec and tests.
+
+Then add --write-baseline and --baseline for portable versioned snapshots of
+unfiltered normalized findings. Preserve secret/error findings, show new and
+expanded findings, and reject incompatible snapshots. Compare relative paths
+across checkouts. Baseline files inside the worktree are explicit control inputs
+excluded from scanner staging and disclosed in traversal metadata. Existing
+Trivy integration exports remain unfiltered. Filesystem publication and decoder
+validation must preserve the current trust boundary.
+
 ## Capabilities
 
 ### New Capabilities

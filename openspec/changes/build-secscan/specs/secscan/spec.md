@@ -165,11 +165,16 @@
 
 #### Scenario: Unsupported inputs
 - **WHEN** repository содержит dependency manifests или source formats без подходящего scanner
-- **THEN** report перечисляет их как unread или unchecked
+- **THEN** report перечисляет их как unread или unchecked с path, категорией и причиной
+- **AND** отдельно раскрывает неклассифицированные файлы, не заявляя для них SAST/SCA coverage
+- **AND** отсутствие scanner selection, failed/skipped scanner и отсутствие per-input evidence не выдаются за успешный анализ
 
 #### Scenario: Traversal disclosure
 - **WHEN** ignored или untracked directories исключены из обхода
-- **THEN** report сообщает эти exclusions и фактические file/byte counts
+- **THEN** report сообщает eligible tracked/untracked и ignored file/byte counts и отдельные non-recursive directory counts
+- **AND** symlinks, deleted entries, non-regular files и явно исключённые control files перечислены с причиной без чтения их содержимого
+- **AND** filesystem scanners, включая Gitleaks, получают только безопасные nonignored regular files
+- **AND** inventory не выдаётся за доказательство scanner read coverage
 
 ### Requirement: Filtering and suppressions
 
@@ -204,6 +209,35 @@
 #### Scenario: Incompatible baseline
 - **WHEN** baseline schema или fingerprint algorithm несовместимы
 - **THEN** secscan отказывается сравнивать их без явного migration
+
+#### Scenario: Severity growth
+- **WHEN** известная finding получает более высокий severity
+- **THEN** она остаётся видимой как expanded, даже если locations и advisory IDs не изменились
+
+#### Scenario: Baseline data boundary
+- **WHEN** пользователь читает baseline
+- **THEN** принимается только ограниченный по размеру versioned JSON с совместимым fingerprint algorithm, без исполнения содержимого
+- **AND** старые messages и source text не попадают в новый report
+- **WHEN** пользователь записывает baseline
+- **THEN** сохраняются полные нормализованные findings текущего scan до фильтрации и integration exports
+- **AND** существующий output не перезаписывается, а failure не публикует частичный snapshot
+
+#### Scenario: Baseline report accounting
+- **WHEN** baseline применяется к report
+- **THEN** coverage и exclusions сохраняются, report содержит counts new/expanded/unchanged/exempt и статус у видимых findings
+- **AND** одновременно новые advisories и locations сохраняются без потери новых сочетаний
+- **AND** --baseline и --write-baseline взаимоисключаются и недоступны для update
+- **AND** выбранные baseline control files не сканируются и перечислены как явно исключённые inputs
+
+### Requirement: Source navigation comments
+
+Затрагиваемые ключевые Go-модули SHALL содержать короткие GRACE module contracts/maps с существующими путями требований и тестов.
+
+#### Scenario: Navigable boundaries
+- **WHEN** агент открывает discovery, report normalization, CLI или baseline code
+- **THEN** видны PURPOSE, существенные SCOPE ограничения, карта реальных символов и ссылки на проверяющие tests
+- **AND** сложные trust/filtering boundaries имеют отдельные короткие контракты функций
+- **AND** комментарии не копируют task status/evidence и не требуют отдельной .grace модели
 
 ### Requirement: Scoped scans
 

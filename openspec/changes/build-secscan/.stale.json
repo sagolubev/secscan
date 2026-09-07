@@ -1,22 +1,22 @@
 {
   "version": 1,
-  "updated_at": "2026-09-06T20:09:28Z",
+  "updated_at": "2026-09-07T04:50:34Z",
   "artifacts": {
     "proposal.md": {
-      "sha256": "1f34644e3259d9bb426da196851e0eb3a8a7b186064fe927feb33a88a436db10",
-      "synced_at": "2026-09-06T20:09:28Z",
+      "sha256": "0052af2f7841ce15e1fdac0b0c90e40257a7a02f2d2dd86054a78193add0a314",
+      "synced_at": "2026-09-07T04:50:34Z",
       "depends_on": []
     },
     "design.md": {
-      "sha256": "34b64466940a2dcf71c34fd20e2130e2b6b67b36445f4426d3344155d8153dbe",
-      "synced_at": "2026-09-06T20:09:28Z",
+      "sha256": "8db2e525012689a4988ebf7967f5648c5cc19beb1c13d0f219e6a3e8e3a65cbf",
+      "synced_at": "2026-09-07T04:50:34Z",
       "depends_on": [
         "proposal.md"
       ]
     },
     "specs/secscan/spec.md": {
-      "sha256": "798a544b0e6f4f2cb107c43ad78fb137a7db376d8254d6ec5207d8eda7828113",
-      "synced_at": "2026-09-06T20:09:28Z",
+      "sha256": "4ec0da57603e3f2d8b32af355cec4e6c5f09846aa1bee9626073446a192b6f9e",
+      "synced_at": "2026-09-07T04:50:34Z",
       "depends_on": [
         "design.md"
       ]

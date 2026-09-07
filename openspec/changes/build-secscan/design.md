@@ -590,3 +590,64 @@ released binary into a temporary directory and inspect --version/--licenses.
 An independent security review covers the network-to-executable boundary.
 Rollback is removal of the installer/docs commit; existing release assets and
 application behavior are unchanged.
+
+## Coverage inventory and source navigation
+
+Git remains the enumeration authority. Query tracked, untracked nonignored and
+ignored paths separately with NUL framing and fsmonitor disabled; deduplicate
+paths and never follow symlinks while inspecting. Each entry is either eligible
+regular input, ignored regular input, or an explicit omission (symlink, missing,
+non-regular, control file). Keep selected paths internally for staging. Publish
+file/byte counts per bucket and immediate-parent directory; counts are not
+recursive, so directory rows can be summed. Preserve legacy ignored counters.
+Classify finite known source languages and dependency manifests; disclose
+unclassified eligible files separately. After scanner completion, report code
+and dependency gaps using scanner selection/status/read evidence. Secret scans
+do not count as SAST or dependency analysis. Scanner-specific coverage remains
+separate from filesystem inventory.
+
+Stage Gitleaks inputs through discovery.Stage, like language adapters, rather
+than mounting the original tree. Empty eligible input means skipped without a
+runtime requirement. Keep its repository-level coverage unit; do not fabricate
+per-file positive read evidence. This intentionally fixes ignored files being
+outside the previously reported exclusion boundary. Test a real synthetic
+secret in ignored and selected locations; only selected input may appear.
+
+Use upstream START_MODULE_CONTRACT/START_MODULE_MAP and optional START_CONTRACT
+markers for key changed Go files. Runtime maps list exported symbols in that
+file; SCRIPT/LOCALS maps identify CLI boundaries. PURPOSE/SCOPE describe only
+useful invariants; LINKS point to existing spec anchors and concrete test names.
+The concise protocol lives in docs/code-navigation.md and is referenced by
+AGENTS.md. This is source navigation, not full upstream graph enforcement.
+
+## Product baseline comparison
+
+Use a small internal/baseline module over the canonical report types. Snapshot
+JSON has its own schema version and explicit fingerprint algorithm identifier,
+and stores unfiltered normalized findings only. Relative finding paths make it
+portable between checkouts. Decode bounded data strictly; reject incompatible
+versions/unknown schema, malformed identities and noncanonical locations without
+echoing untrusted content. Never copy old messages into new output.
+
+For code/configuration, match kind/rule/language/origin/image and canonical
+source identity; compare locations. For dependencies, require equal package
+identity/version/qualifiers/image and overlapping advisory IDs before treating
+findings as the same issue. Newly unrelated advisories are new issues. Merge
+old matching locations/aliases for comparison. Show new locations, new advisory
+IDs and severity increases. When both location and advisory dimensions grow,
+retain their union without inventing or dropping combinations: new advisories
+at current locations plus known advisories at new locations. Secrets/errors
+always remain visible. Keep counters for original findings and explicit output
+fragment counts. No resolved-finding claim is inferred from an incomplete scan.
+
+CLI applies baselines after scanning; Trivy exports use the original unfiltered
+result. --write-baseline and --baseline are mutually exclusive, unavailable for
+update and validate paths before execution. The write command creates a new
+snapshot only; existing files are preserved. Baseline data is encoded before
+publication, with atomic no-clobber publication in the chosen filesystem. Read
+and write paths inside the worktree are explicit excluded control files, passed
+as scan options and reflected in traversal omissions. A failed scan cannot
+produce a successful baseline write; partial coverage is retained in the report
+and never becomes proof of absence. Exemption and new/expanded behavior get
+focused tests plus a CLI acceptance fixture. Comparison never mutates input
+findings or stored snapshots. Existing JSON v1 changes are additive.

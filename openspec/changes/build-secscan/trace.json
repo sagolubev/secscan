@@ -3,16 +3,28 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.15",
-  "baselineCommit": "b14aa1664f73202df152c47d7f4447e7836b6644",
+  "targetOutcome": "secscan-ij8.13",
+  "baselineCommit": "a33868c9465550b226037de992f84d0b630f3dae",
   "scope": {
     "implementation": [
-      "install.sh",
-      ".github/scripts/test-installer.py",
-      ".github/workflows/ci.yml"
+      "internal/discovery/",
+      "internal/report/report.go",
+      "internal/report/inventory.go",
+      "internal/gitleaks/parser.go",
+      "internal/gitleaks/run.go",
+      "cmd/secscan/main.go",
+      "cmd/secscan/main_test.go",
+      "cmd/secscan/coverage.go",
+      "cmd/secscan/coverage_test.go",
+      "internal/opengrep/parser.go",
+      "internal/opengrep/parser_test.go",
+      "internal/opengrep/scan.go",
+      "internal/opengrep/scan_test.go"
     ],
     "governance": [
+      "AGENTS.md",
       "README.md",
+      "docs/code-navigation.md",
       "openspec/changes/build-secscan/proposal.md",
       "openspec/changes/build-secscan/specs/secscan/spec.md",
       "openspec/changes/build-secscan/design.md",
@@ -168,8 +180,16 @@
     {
       "requirement": "Honest coverage",
       "scenario": "Unsupported inputs",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/report/inventory.go",
+        "cmd/secscan/coverage.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go",
+        "cmd/secscan/coverage_test.go"
+      ]
     },
     {
       "requirement": "Honest coverage",
@@ -177,10 +197,12 @@
       "disposition": "target",
       "components": [
         "internal/discovery/discovery.go",
-        "internal/report/report.go"
+        "internal/report/inventory.go",
+        "cmd/secscan/coverage.go"
       ],
       "tests": [
-        "internal/discovery/discovery_test.go"
+        "internal/discovery/discovery_test.go",
+        "cmd/secscan/coverage_test.go"
       ]
     },
     {
@@ -941,6 +963,30 @@
       "tests": [
         ".github/scripts/test-installer.py"
       ]
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "Severity growth",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.16"
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "Baseline data boundary",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.16"
+    },
+    {
+      "requirement": "Baselines",
+      "scenario": "Baseline report accounting",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.16"
+    },
+    {
+      "requirement": "Source navigation comments",
+      "scenario": "Navigable boundaries",
+      "disposition": "deferred",
+      "issue": "secscan-ij8.16"
     }
   ],
   "checks": {
@@ -973,18 +1019,15 @@
     ],
     "target": [
       {
-        "name": "installer-syntax",
+        "name": "coverage-focused",
         "argv": [
-          "sh",
-          "-n",
-          "install.sh"
-        ]
-      },
-      {
-        "name": "installer-tests",
-        "argv": [
-          "python3",
-          ".github/scripts/test-installer.py"
+          "go",
+          "test",
+          "./internal/discovery",
+          "./internal/gitleaks",
+          "./internal/report",
+          "./cmd/secscan",
+          "./internal/opengrep"
         ]
       },
       {
