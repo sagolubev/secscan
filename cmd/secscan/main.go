@@ -1,8 +1,8 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Compose CLI validation, isolated scanners and canonical output.
 // SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
-// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, internal/scanner/platform.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go, cmd/secscan/scope.go
-// LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory, cmd/secscan/platform_test.go#TestPlatformSkipsPreserveScopesAndNativeSibling
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, internal/report/budget.go, internal/scanner/platform.go, cmd/secscan/baseline.go, cmd/secscan/config.go, cmd/secscan/render.go, cmd/secscan/scope.go
+// LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory, cmd/secscan/platform_test.go#TestPlatformSkipsPreserveScopesAndNativeSibling, cmd/secscan/budget_test.go#TestRunBudgetPreservesExports
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
@@ -92,6 +92,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	configFile := flags.String("config", "", "read project filtering policy from this TOML file")
 	noConfig := flags.Bool("no-config", false, "ignore project filtering configuration")
 	minSeverity := flags.String("min-severity", "", "hide ranked findings below this severity; keep secrets, errors and unknown severity")
+	maxTokens := flags.Int("max-tokens", 0, "JSON-only budget in UTF-8 bytes including metadata and LF; conservative, not model tokens")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	var scopes scopeFlags
 	flags.Var(&scopes, "scope", "limit file-safe scanners to a Git-relative file or directory; repeat up to 16 times")
@@ -148,8 +149,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	htmlFlag, sarifFlag := false, false
 	configFlag, noConfigFlag, severityFlag := false, false, false
 	rulePackFlag := false
+	budgetFlag := false
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "max-tokens":
+			budgetFlag = true
 		case "rule-pack":
 			rulePackFlag = true
 		case "trivy-reports":
@@ -170,6 +174,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			severityFlag = true
 		}
 	})
+	if budgetFlag && (updating || *maxTokens <= 0) {
+		fmt.Fprintln(stderr, "--max-tokens requires a positive integer and cannot be used with update")
+		return 2
+	}
 	var rulePack *rules.Pack
 	if rulePackFlag {
 		if updating || !rules.ValidID(*rulePackID) || !slices.Contains(selection, "semgrep") && !slices.Contains(selection, "python-sast") && !slices.Contains(selection, "typescript-sast") {
@@ -359,7 +367,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 			baselineData, baselineErr = baseline.Encode(unfiltered.Findings)
 		}
 	}
-	data, err := report.Marshal(result)
+	var data []byte
+	var budget report.BudgetSummary
+	if budgetFlag {
+		data, budget, err = report.MarshalBudget(result, *maxTokens)
+	} else {
+		data, err = report.Marshal(result)
+	}
 	if err != nil {
 		closeReporter()
 		fmt.Fprintln(stderr, err)
@@ -369,6 +383,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	if _, err := fmt.Fprintln(stdout, string(data)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if budget.Exceeded {
+		fmt.Fprintf(stderr, "JSON budget exceeded: protected findings and metadata require %d UTF-8 bytes; limit is %d\n", budget.Measured, budget.Limit)
 	}
 	if err := writeRenderedOutputs(ctx, renderedOutputs, result, unfiltered); err != nil {
 		fmt.Fprintln(stderr, err)

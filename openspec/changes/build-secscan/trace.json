@@ -3,13 +3,12 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.25",
-  "baselineCommit": "9a4f2b40fdf8e1542551d7940faade783c5dc7cc",
+  "targetOutcome": "secscan-ij8.21",
+  "baselineCommit": "4a77cf717084db3ea90069ce71f83c875a90a95b",
   "scope": {
     "implementation": [
-      "internal/scanner/",
-      "cmd/secscan/",
-      "internal/container/"
+      "internal/report/",
+      "cmd/secscan/"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -422,8 +421,15 @@
     {
       "requirement": "Report rendering",
       "scenario": "Token budget",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.21"
+      "disposition": "target",
+      "components": [
+        "internal/report/budget.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/report/budget_test.go",
+        "cmd/secscan/budget_test.go"
+      ]
     },
     {
       "requirement": "LLM analysis",
@@ -1427,6 +1433,32 @@
         "internal/scanner/platform_test.go",
         "cmd/secscan/platform_test.go"
       ]
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "Budget counting contract",
+      "disposition": "target",
+      "components": [
+        "internal/report/budget.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/report/budget_test.go",
+        "cmd/secscan/budget_test.go"
+      ]
+    },
+    {
+      "requirement": "Report rendering",
+      "scenario": "Budget preservation",
+      "disposition": "target",
+      "components": [
+        "internal/report/budget.go",
+        "cmd/secscan/main.go"
+      ],
+      "tests": [
+        "internal/report/budget_test.go",
+        "cmd/secscan/budget_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1449,13 +1481,12 @@
         ]
       },
       {
-        "name": "existing-platform-boundaries",
+        "name": "existing-report-boundary",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/scanner",
-          "./internal/container",
+          "./internal/report",
           "./cmd/secscan",
           "-count=1"
         ]
@@ -1463,13 +1494,12 @@
     ],
     "target": [
       {
-        "name": "platform-focused",
+        "name": "budget-focused",
         "argv": [
           "go",
           "test",
           "-json",
-          "./internal/scanner",
-          "./internal/container",
+          "./internal/report",
           "./cmd/secscan",
           "-count=1"
         ]

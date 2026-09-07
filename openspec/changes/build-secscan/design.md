@@ -1028,3 +1028,49 @@ Use realistic fake runtime responses for unavailable architectures and the
 existing native Linux amd64/arm64 CI for supported execution. The contract does
 not claim native execution on an unsupported CPU. Rollback reverts the additive
 gate; existing successful supported scans and stored assets stay valid.
+
+
+## Deterministic JSON report budget
+
+Outcome .21 uses the existing feature profile, Standard artifacts and
+Comprehensive verification. It extends the report boundary after existing
+filter/baseline processing. It needs no scanner or provider integration.
+Local project-card search found source-tokenization tools (jscpd), not a suitable
+provider-neutral JSON budget; use standard-library JSON encoding and byte length.
+
+The explicit --max-tokens positive integer selects counter utf8-bytes-v1: one
+UTF-8 byte is one conservative budget unit. Measure the entire compact JSON plus
+its final LF, including budget metadata. This deliberately avoids an undocumented
+four-characters heuristic and model vocabulary downloads. It is not an exact
+model-token count or a promise about chat templates/special tokens. No flag means
+byte-compatible existing JSON and no budget field. Reject invalid values and
+update usage before scanning.
+
+Derive a separate JSON view from the existing visible report; do not mutate it
+or the full report. Keep HTML at the ordinary visible view, SARIF/baseline/Trivy
+at their existing full views. Normalize once through the existing canonical
+report path and retain original fingerprints and filter fragments. Try floors
+all, low, medium, high, critical, protected-only in that order. A floor removes
+all ranked findings below it; aliases info/warning/error use existing severity
+ranks. Secret and error kinds and unranked severities are always retained.
+Never drop scanner failures, inventory, coverage, scope or provenance metadata.
+Stop at the first serialized report that fits. Group removal is deterministic,
+not dependent on arrival order or message size. At most six full serialization
+passes are needed, apart from resolving the measured-count digits.
+
+Expose budget {counter, limit, measured, floor, removedFragments,
+retainedFragments, exceeded}. Measured includes its own digits; settle the
+bounded integer-width fixed point. Counts describe visible fragments entering
+and leaving this last JSON-only stage; existing filtering/baseline summaries
+still describe their prior stages. If protected data alone exceeds the limit,
+return the whole protected view with exceeded=true and a concise stderr warning.
+Preserve scanner exit codes. Never slice serialized bytes or hide failure data.
+Rollback omits the flag; no cache, report schema version or dependencies change.
+
+Verify exact boundary counts including UTF-8/escaping/LF and metadata, absent
+flag compatibility, invalid flags, deterministic severity groups, aliases,
+secrets/errors/unknown severity, protected overflow, immutable nested fragments,
+and unchanged HTML/full exports. Fresh unit/full checks and independent review
+are required. Least confident: byte units are intentionally conservative and
+can remove more than a provider tokenizer would; document that limitation next
+to the flag, and add a model-specific counter only with a future concrete need.

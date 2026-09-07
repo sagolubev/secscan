@@ -386,6 +386,22 @@
 - **THEN** secscan применяет документированный deterministic filter policy
 - **AND** report сообщает итоговый floor и удалённые counts
 - **AND** JSON остаётся структурно полным
+- **AND** budget применяется только к JSON stdout после обычных filters; HTML, SARIF, baseline и Trivy exports сохраняют прежнюю полноту
+
+#### Scenario: Budget counting contract
+- **WHEN** задан положительный целый `--max-tokens`
+- **THEN** counter `utf8-bytes-v1` считает каждый UTF-8 byte полного minified JSON с завершающим LF как одну conservative budget unit, включая budget metadata
+- **AND** report раскрывает counter, limit, measured units, floor, removed/retained fragment counts и exceeded; это не точный tokenizer конкретной модели
+- **WHEN** budget отсутствует
+- **THEN** JSON bytes и schema fields не меняются
+- **WHEN** budget неположительный, malformed или задан для update
+- **THEN** exit code равен 2 и scan не начинается
+
+#### Scenario: Budget preservation
+- **WHEN** report не помещается в budget
+- **THEN** последовательно удаляются целые severity groups informational, low, medium, high, critical; порядок findings не влияет на выбранный floor
+- **AND** secret/error findings, неизвестные severity, scanner statuses и вся coverage metadata сохраняются
+- **AND** если обязательные данные всё ещё превышают budget, JSON остаётся полным с exceeded=true и stderr diagnostic; scanner exit semantics не меняются
 
 ### Requirement: LLM analysis
 
