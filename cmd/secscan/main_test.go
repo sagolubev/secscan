@@ -57,7 +57,7 @@ func TestInformationFlagsRejectScanAndUpdateArguments(t *testing.T) {
 func TestRunWritesOneJSONDocument(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	scan := func(_ context.Context, _ string, _ []string, _ bool, emit func(progress.Event)) (report.Report, error) {
+	scan := func(_ context.Context, _ string, _ scanOptions, emit func(progress.Event)) (report.Report, error) {
 		emit(progress.Event{Scanner: "gitleaks", Stage: progress.StageQueued, Status: progress.StatusQueued})
 		return report.Report{SchemaVersion: "1", Repository: "/repo"}, nil
 	}
@@ -75,7 +75,7 @@ func TestRunWritesOneJSONDocument(t *testing.T) {
 }
 
 func TestRunExitCodesAndScannerSelection(t *testing.T) {
-	failed := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	failed := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("scan failed")
 	}
 	for _, test := range []struct {
@@ -89,7 +89,7 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 		{
 			name: "all selects gitleaks",
 			args: []string{"--scanners", "all"},
-			scan: func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+			scan: func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 				return report.Report{SchemaVersion: "1"}, nil
 			},
 			want: 0,
@@ -105,7 +105,7 @@ func TestRunExitCodesAndScannerSelection(t *testing.T) {
 }
 
 func TestRunProgressModes(t *testing.T) {
-	success := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	success := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{SchemaVersion: "1"}, nil
 	}
 
@@ -161,7 +161,7 @@ func TestBuildReportAllowsAllSkipped(t *testing.T) {
 }
 
 func TestRunTTYFallsBackToPlainWhenStderrIsNotTerminal(t *testing.T) {
-	failed := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	failed := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("scan failed")
 	}
 	var stderr bytes.Buffer
@@ -251,7 +251,7 @@ func TestScanMissingPreparationIsActionableAndDoesNotPull(t *testing.T) {
 	}
 	t.Setenv("SECSCAN_TEST_CALLS", log)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	_, err := scan(context.Background(), root, []string{"gitleaks"}, false, func(progress.Event) {})
+	_, err := scan(context.Background(), root, scanOptions{Scanners: []string{"gitleaks"}}, func(progress.Event) {})
 	if err == nil || !strings.Contains(err.Error(), "secscan update") {
 		t.Fatalf("scan missing cache error=%v", err)
 	}
@@ -273,7 +273,7 @@ func TestCISkippedWithoutRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := scan(context.Background(), root, selected, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: selected}, func(progress.Event) {})
 	if err != nil || len(result.Scanners) != 2 {
 		t.Fatalf("%#v %v", result, err)
 	}
@@ -293,7 +293,7 @@ func TestIaCSkippedWithoutRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := scan(context.Background(), root, selected, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: selected}, func(progress.Event) {})
 	if err != nil || len(result.Scanners) != 3 {
 		t.Fatalf("%#v %v", result, err)
 	}
@@ -326,7 +326,7 @@ func TestIaCMissingPreparation(t *testing.T) {
 	t.Setenv("SECSCAN_TEST_CALLS", log)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for _, name := range []string{"checkov", "checkov-terraform", "kics"} {
-		_, err := scan(context.Background(), root, []string{name}, false, func(progress.Event) {})
+		_, err := scan(context.Background(), root, scanOptions{Scanners: []string{name}}, func(progress.Event) {})
 		if err == nil || !strings.Contains(err.Error(), "secscan update") {
 			t.Errorf("%s error=%v", name, err)
 		}
@@ -391,7 +391,7 @@ func TestDependenciesSkippedWithoutRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := scan(context.Background(), root, selected, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: selected}, func(progress.Event) {})
 	if err != nil || len(result.Scanners) != 3 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
@@ -410,7 +410,7 @@ func TestDependencyUnreadOnlyDoesNotSucceed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "build.gradle.kts"), []byte(`dependencies { implementation(variable) }`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := scan(context.Background(), root, []string{"osv-scanner"}, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: []string{"osv-scanner"}}, func(progress.Event) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,7 +428,7 @@ func TestCodeSkippedWithoutRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := scan(context.Background(), root, selected, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: selected}, func(progress.Event) {})
 	if err != nil || len(result.Scanners) != 3 {
 		t.Fatalf("code scan empty = %#v, %v", result, err)
 	}
@@ -572,8 +572,8 @@ func TestNativeSelectionAndOCIConsent(t *testing.T) {
 	if slices.Contains(all, "oci-images") {
 		t.Fatal("default enables OCI")
 	}
-	fake := func(_ context.Context, _ string, names []string, _ bool, _ func(progress.Event)) (report.Report, error) {
-		if !slices.Contains(names, "oci-images") {
+	fake := func(_ context.Context, _ string, options scanOptions, _ func(progress.Event)) (report.Report, error) {
+		if !slices.Contains(options.Scanners, "oci-images") {
 			t.Error("explicit flag did not add OCI")
 		}
 		return report.Report{}, nil
@@ -596,7 +596,7 @@ func TestNativeAndOCIWithoutRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	result, err := scan(context.Background(), root, []string{"refresh-versions"}, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: []string{"refresh-versions"}}, func(progress.Event) {})
 	if err != nil || len(result.Scanners) != 2 {
 		t.Fatalf("metadata+unchecked images=%#v err=%v", result, err)
 	}
@@ -609,7 +609,7 @@ func TestNativeAndOCIWithoutRuntime(t *testing.T) {
 
 func TestRunEmitsFailureEvidenceWithoutClaimingSuccess(t *testing.T) {
 	for _, failure := range []error{errors.New("SYNTHETIC_RAW_DIAGNOSTIC"), context.Canceled} {
-		attempted := func(ctx context.Context, _ string, _ []string, _ bool, emit func(progress.Event)) (report.Report, error) {
+		attempted := func(ctx context.Context, _ string, _ scanOptions, emit func(progress.Event)) (report.Report, error) {
 			outcome, err := orchestrator.Run(ctx, []orchestrator.Job{{Name: "oci-images", Run: func(context.Context) (report.Scanner, []report.Finding, error) {
 				return report.Scanner{Name: "oci-images", Status: "success", Coverage: report.Coverage{Read: 1, Unit: "images"}, Capabilities: []string{"host-runtime-registry-access"}, Images: []report.Image{{Reference: "synthetic:first", Digest: "sha256:complete", Status: "success"}, {Reference: "synthetic:second", Digest: "sha256:second", Status: "cleanup_failed"}}}, []report.Finding{{Kind: "code", RuleID: "completed-safe-finding", Fingerprint: "completed"}}, failure
 			}}}, 1, emit)
@@ -632,7 +632,7 @@ func TestRunEmitsFailureEvidenceWithoutClaimingSuccess(t *testing.T) {
 
 func TestRunFailureWithoutReportEmitsNoJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := run(context.Background(), []string{"--progress", "off"}, &stdout, &stderr, func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	code := run(context.Background(), []string{"--progress", "off"}, &stdout, &stderr, func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{}, errors.New("runtime unavailable")
 	})
 	if code != 1 || stdout.Len() != 0 {

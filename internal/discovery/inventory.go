@@ -45,6 +45,25 @@ func enumerate(root string, excluded []string) ([]string, report.Inventory, erro
 	}
 	var inventory report.Inventory
 	var selected []string
+	controls := make(map[string]os.FileInfo, len(excluded))
+	matched := make(map[string]bool, len(excluded))
+	for _, path := range excluded {
+		controls[path] = nil
+		source, err := safeSource(root, filepath.FromSlash(path))
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, errSymlink) {
+			continue
+		}
+		if err != nil {
+			return nil, report.Inventory{}, fmt.Errorf("inspect control path: %w", err)
+		}
+		info, err := os.Lstat(source)
+		if err != nil {
+			return nil, report.Inventory{}, fmt.Errorf("inspect control path: %w", err)
+		}
+		if info.Mode().IsRegular() {
+			controls[path] = info
+		}
+	}
 	seen := map[string]bool{}
 	for _, group := range []struct {
 		paths   []string
@@ -57,7 +76,8 @@ func enumerate(root string, excluded []string) ([]string, report.Inventory, erro
 				continue
 			}
 			seen[path] = true
-			if slices.Contains(excluded, path) {
+			if _, control := controls[path]; control {
+				matched[path] = true
 				inventory.Omitted = append(inventory.Omitted, report.OmittedInput{Path: path, Reason: "control_file"})
 				continue
 			}
@@ -83,6 +103,17 @@ func enumerate(root string, excluded []string) ([]string, report.Inventory, erro
 				inventory.Omitted = append(inventory.Omitted, report.OmittedInput{Path: path, Reason: "non_regular"})
 				continue
 			}
+			control := false
+			for path, excludedInfo := range controls {
+				if excludedInfo != nil && os.SameFile(info, excludedInfo) {
+					matched[path] = true
+					control = true
+				}
+			}
+			if control {
+				inventory.Omitted = append(inventory.Omitted, report.OmittedInput{Path: path, Reason: "control_file"})
+				continue
+			}
 			group.stats.Files++
 			group.stats.Bytes += info.Size()
 			parent := filepath.ToSlash(filepath.Dir(path))
@@ -100,6 +131,11 @@ func enumerate(root string, excluded []string) ([]string, report.Inventory, erro
 			group.stats.Directories = append(group.stats.Directories, directory)
 		}
 		slices.SortFunc(group.stats.Directories, func(a, b report.DirectoryInventory) int { return strings.Compare(a.Path, b.Path) })
+	}
+	for path := range controls {
+		if !matched[path] {
+			inventory.Omitted = append(inventory.Omitted, report.OmittedInput{Path: path, Reason: "control_file"})
+		}
 	}
 	slices.Sort(selected)
 	slices.SortFunc(inventory.Omitted, func(a, b report.OmittedInput) int { return strings.Compare(a.Path, b.Path) })

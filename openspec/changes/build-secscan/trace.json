@@ -3,33 +3,31 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.13",
-  "baselineCommit": "a33868c9465550b226037de992f84d0b630f3dae",
+  "targetOutcome": "secscan-ij8.16",
+  "baselineCommit": "b341f7a6a28267b7d8d20b759ea1389890930998",
   "scope": {
     "implementation": [
-      "internal/discovery/",
+      "internal/baseline/",
       "internal/report/report.go",
-      "internal/report/inventory.go",
-      "internal/gitleaks/parser.go",
-      "internal/gitleaks/run.go",
+      "internal/report/report_test.go",
+      "internal/report/baseline.go",
       "cmd/secscan/main.go",
       "cmd/secscan/main_test.go",
-      "cmd/secscan/coverage.go",
+      "cmd/secscan/baseline.go",
+      "cmd/secscan/baseline_test.go",
+      "cmd/secscan/export_test.go",
+      "cmd/secscan/export.go",
       "cmd/secscan/coverage_test.go",
-      "internal/opengrep/parser.go",
-      "internal/opengrep/parser_test.go",
-      "internal/opengrep/scan.go",
-      "internal/opengrep/scan_test.go"
+      "internal/discovery/inventory.go",
+      "internal/discovery/discovery_test.go",
+      "go.mod"
     ],
     "governance": [
-      "AGENTS.md",
       "README.md",
-      "docs/code-navigation.md",
-      "openspec/changes/build-secscan/proposal.md",
-      "openspec/changes/build-secscan/specs/secscan/spec.md",
+      "openspec/changes/build-secscan/trace.json",
       "openspec/changes/build-secscan/design.md",
-      "openspec/changes/build-secscan/.stale.json",
-      "openspec/changes/build-secscan/trace.json"
+      "openspec/changes/build-secscan/specs/secscan/spec.md",
+      "openspec/changes/build-secscan/.stale.json"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -208,8 +206,15 @@
     {
       "requirement": "Filtering and suppressions",
       "scenario": "Exempt findings",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Filtering and suppressions",
@@ -226,20 +231,41 @@
     {
       "requirement": "Baselines",
       "scenario": "New finding",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Baselines",
       "scenario": "Expanded finding",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Baselines",
       "scenario": "Incompatible baseline",
-      "disposition": "deferred",
-      "issue": "secscan-ij8"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Scoped scans",
@@ -967,26 +993,56 @@
     {
       "requirement": "Baselines",
       "scenario": "Severity growth",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.16"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Baselines",
       "scenario": "Baseline data boundary",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.16"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Baselines",
       "scenario": "Baseline report accounting",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.16"
+      "disposition": "target",
+      "components": [
+        "internal/baseline/baseline.go",
+        "cmd/secscan/baseline.go"
+      ],
+      "tests": [
+        "internal/baseline/baseline_test.go",
+        "cmd/secscan/baseline_test.go"
+      ]
     },
     {
       "requirement": "Source navigation comments",
       "scenario": "Navigable boundaries",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.16"
+      "disposition": "target",
+      "components": [
+        "internal/discovery/discovery.go",
+        "internal/report/report.go",
+        "cmd/secscan/main.go",
+        "internal/baseline/baseline.go"
+      ],
+      "tests": [
+        "internal/discovery/discovery_test.go",
+        "internal/baseline/baseline_test.go"
+      ]
     }
   ],
   "checks": {
@@ -1019,15 +1075,14 @@
     ],
     "target": [
       {
-        "name": "coverage-focused",
+        "name": "baseline-focused",
         "argv": [
           "go",
           "test",
-          "./internal/discovery",
-          "./internal/gitleaks",
+          "./internal/baseline",
           "./internal/report",
-          "./cmd/secscan",
-          "./internal/opengrep"
+          "./internal/discovery",
+          "./cmd/secscan"
         ]
       },
       {

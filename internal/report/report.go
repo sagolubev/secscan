@@ -17,7 +17,7 @@
 // Package - Versioned dependency identity.
 // Location - Repository-relative finding location.
 // Finding - Sanitized finding and provenance.
-// Marshal - Encode deterministic JSON.
+// Marshal - Encode deterministic JSON while preserving baseline delta fragments.
 // Normalize - Merge matching findings without mutating inputs.
 // END_MODULE_MAP
 
@@ -34,6 +34,7 @@ import (
 )
 
 type Report struct {
+	Baseline        *BaselineSummary `json:"baseline,omitempty"`
 	Inventory       *Inventory       `json:"inventory,omitempty"`
 	UncheckedInputs []UncheckedInput `json:"uncheckedInputs,omitempty"`
 	SchemaVersion   string           `json:"schemaVersion"`
@@ -141,7 +142,12 @@ type Finding struct {
 
 func Marshal(input Report) ([]byte, error) {
 	result := input
-	result.Findings = Normalize(input.Findings)
+	if input.Baseline == nil {
+		result.Findings = Normalize(input.Findings)
+	} else {
+		// Comparison fragments keep the original finding fingerprint and must not merge.
+		result.Findings = append([]Finding(nil), input.Findings...)
+	}
 	result.Scanners = append([]Scanner(nil), input.Scanners...)
 	if result.Findings == nil {
 		result.Findings = []Finding{}

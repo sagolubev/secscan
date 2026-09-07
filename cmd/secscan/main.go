@@ -1,14 +1,15 @@
 // START_MODULE_CONTRACT
 // PURPOSE: Compose CLI validation, isolated scanners and canonical output.
 // SCOPE: Keep stdout JSON-only; stage Git-selected files and expose incomplete coverage.
-// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go
+// DEPENDS: internal/discovery/discovery.go, internal/orchestrator/orchestrator.go, internal/report/report.go, cmd/secscan/baseline.go
 // LINKS: openspec/changes/build-secscan/trace.json, cmd/secscan/main_test.go#TestRunWritesOneJSONDocument, cmd/secscan/coverage_test.go#TestAcceptanceGitleaksUsesSelectedInventory
 // ROLE: SCRIPT
 // MAP_MODE: LOCALS
 // END_MODULE_CONTRACT
 // START_MODULE_MAP
 // main - Own process cancellation and exit status.
-// run - Validate arguments and serialize one result.
+// scanOptions - Explicit scanner selection and excluded control paths.
+// run - Validate arguments, apply baselines and serialize one result.
 // scan - Compose prepared scanner jobs and inventory evidence.
 // buildReport - Preserve successful and partial results.
 // parseScannerSelection - Validate the finite scanner set.
@@ -33,6 +34,7 @@ import (
 	"time"
 
 	"github.com/sagolubev/secscan"
+	"github.com/sagolubev/secscan/internal/baseline"
 	"github.com/sagolubev/secscan/internal/container"
 	"github.com/sagolubev/secscan/internal/discovery"
 	"github.com/sagolubev/secscan/internal/gitleaks"
@@ -44,7 +46,13 @@ import (
 	"golang.org/x/term"
 )
 
-type scanFunc func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error)
+type scanOptions struct {
+	Scanners     []string
+	TrivyReports bool
+	Excluded     []string
+}
+
+type scanFunc func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error)
 
 var version = "dev"
 
@@ -69,6 +77,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	scanImages := flags.Bool("scan-images", false, "authorize host runtime image pulls and offline archive scans")
 	scanners := flags.String("scanners", "all", "comma-separated scanner selection")
 	trivyReports := flags.String("trivy-reports", "", "write Trivy CycloneDX and SonarQube JSON to a new directory")
+	baselineInput := flags.String("baseline", "", "compare findings with a saved baseline")
+	baselineOutput := flags.String("write-baseline", "", "write unfiltered findings to a new baseline file")
 	progressValue := flags.String("progress", "auto", "progress mode: auto, tty, plain, or off")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -119,12 +129,37 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		path = flags.Arg(0)
 	}
 
-	wantReports := false
+	wantReports, readBaselineFlag, writeBaselineFlag := false, false, false
 	flags.Visit(func(f *flag.Flag) {
-		if f.Name == "trivy-reports" {
+		switch f.Name {
+		case "trivy-reports":
 			wantReports = true
+		case "baseline":
+			readBaselineFlag = true
+		case "write-baseline":
+			writeBaselineFlag = true
 		}
 	})
+	var baselineOptions baselineRequest
+	if readBaselineFlag || writeBaselineFlag {
+		if updating || readBaselineFlag && writeBaselineFlag || readBaselineFlag && *baselineInput == "" || writeBaselineFlag && *baselineOutput == "" {
+			fmt.Fprintln(stderr, "--baseline and --write-baseline require a file, are mutually exclusive and cannot be used with update")
+			return 2
+		}
+		root, err := gitRoot(path)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		baselineOptions, err = prepareBaseline(root, *baselineInput, *baselineOutput)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if baselineOptions.output != nil {
+			defer baselineOptions.output.close()
+		}
+	}
 	var destination *exportDestination
 	if wantReports {
 		if updating || *trivyReports == "" || !slices.Contains(selection, "trivy") {
@@ -184,11 +219,29 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 	}
 	defer closeReporter()
 
-	result, scanErr := scan(ctx, path, selection, wantReports, reporter.Emit)
+	result, scanErr := scan(ctx, path, scanOptions{Scanners: selection, TrivyReports: wantReports, Excluded: baselineOptions.excluded}, reporter.Emit)
 	if scanErr != nil && (result.SchemaVersion == "" || len(result.Scanners) == 0) {
 		closeReporter()
 		fmt.Fprintln(stderr, scanErr)
 		return 1
+	}
+	unfiltered := result
+	var baselineData []byte
+	var baselineErr error
+	if baselineOptions.previous != nil {
+		var summary report.BaselineSummary
+		result.Findings, summary, baselineErr = baseline.Compare(unfiltered.Findings, *baselineOptions.previous)
+		if baselineErr == nil {
+			result.Baseline = &summary
+		} else {
+			result = unfiltered
+		}
+	}
+	if baselineOptions.output != nil && scanErr == nil {
+		baselineErr = baselineWritable(unfiltered)
+		if baselineErr == nil {
+			baselineData, baselineErr = baseline.Encode(unfiltered.Findings)
+		}
 	}
 	data, err := report.Marshal(result)
 	if err != nil {
@@ -205,8 +258,18 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 		fmt.Fprintln(stderr, scanErr)
 		return 1
 	}
+	if baselineErr != nil {
+		fmt.Fprintln(stderr, baselineErr)
+		return 1
+	}
 	if destination != nil {
-		if err := destination.write(ctx, result); err != nil {
+		if err := destination.write(ctx, unfiltered); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	if baselineOptions.output != nil {
+		if err := publishBaseline(ctx, baselineOptions.output, baselineData); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
@@ -217,15 +280,15 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, scan scan
 func scan(
 	ctx context.Context,
 	path string,
-	selection []string,
-	wantReports bool,
+	options scanOptions,
 	emit func(progress.Event),
 ) (report.Report, error) {
+	selection, wantReports := options.Scanners, options.TrivyReports
 	root, err := gitRoot(path)
 	if err != nil {
 		return report.Report{}, err
 	}
-	inventory, err := discovery.Discover(root)
+	inventory, err := discovery.Discover(root, options.Excluded...)
 	if err != nil {
 		return report.Report{}, err
 	}

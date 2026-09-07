@@ -19,7 +19,7 @@ func TestTrivyReportsRejectUnconfirmedInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	destination := filepath.Join(t.TempDir(), "reports")
-	fake := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	fake := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{SchemaVersion: "1", Repository: root, Scanners: []report.Scanner{
 			{Name: "trivy", Status: "skipped", Coverage: report.Coverage{Unit: "files"}},
 			{Name: "gitleaks", Status: "success", Coverage: report.Coverage{Read: 1, Unit: "repository"}},
@@ -39,7 +39,7 @@ func TestTrivyReportsWriteBothFilesAndKeepStdoutCanonical(t *testing.T) {
 	root := exportTestRepository(t)
 	destination := filepath.Join(t.TempDir(), "reports")
 	payload := &report.TrivyReports{CycloneDX: []byte(`{"bomFormat":"CycloneDX","components":[]}`), SonarQube: []byte(`{"rules":[],"issues":[]}`)}
-	fake := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+	fake := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 		return report.Report{SchemaVersion: "1", Repository: root, Scanners: []report.Scanner{{Name: "trivy", Status: "success", Coverage: report.Coverage{Read: 2, Unit: "packages", ReadInputs: []string{"package-lock.json"}}, TrivyReports: payload}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
@@ -88,7 +88,7 @@ func TestTrivyReportsUsageAndDestinationConflicts(t *testing.T) {
 		{"--trivy-reports", filepath.Join(alias, "reports"), root},
 	} {
 		var stdout, stderr bytes.Buffer
-		fake := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+		fake := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 			t.Fatal("invalid request started scanner")
 			return report.Report{}, nil
 		}
@@ -112,7 +112,7 @@ func TestTrivyReportsRefusePartialCoverage(t *testing.T) {
 		{Unit: "packages"},
 	} {
 		destination := filepath.Join(t.TempDir(), "reports")
-		fake := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+		fake := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 			return report.Report{SchemaVersion: "1", Repository: root, Scanners: []report.Scanner{{Name: "trivy", Status: "success", Coverage: coverage, TrivyReports: &report.TrivyReports{CycloneDX: []byte(`{}`), SonarQube: []byte(`{}`)}}}}, nil
 		}
 		var stdout, stderr bytes.Buffer
@@ -141,7 +141,7 @@ func TestTrivyReportsCancellationAndLateConflict(t *testing.T) {
 			destination := filepath.Join(t.TempDir(), "reports")
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			fake := func(context.Context, string, []string, bool, func(progress.Event)) (report.Report, error) {
+			fake := func(context.Context, string, scanOptions, func(progress.Event)) (report.Report, error) {
 				if mode == "canceled" {
 					cancel()
 				} else {

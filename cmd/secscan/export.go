@@ -18,6 +18,27 @@ type exportDestination struct {
 	name   string
 }
 
+// repositoryRelativePath recognizes directory aliases on case-insensitive filesystems.
+// Both inputs have already had parent symlinks resolved by the caller.
+func repositoryRelativePath(repository, path string) (string, error) {
+	root, err := os.Stat(repository)
+	if err != nil {
+		return "", err
+	}
+	for ancestor := path; ; ancestor = filepath.Dir(ancestor) {
+		info, err := os.Lstat(ancestor)
+		if err == nil && os.SameFile(root, info) {
+			return filepath.Rel(ancestor, path)
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		if filepath.Dir(ancestor) == ancestor {
+			return filepath.Rel(repository, path)
+		}
+	}
+}
+
 // prepareExportDestination pins the existing parent without creating output.
 func prepareExportDestination(repository, destination string) (*exportDestination, error) {
 	absolute, err := filepath.Abs(destination)
@@ -32,7 +53,7 @@ func prepareExportDestination(repository, destination string) (*exportDestinatio
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository: %w", err)
 	}
-	relative, err := filepath.Rel(root, parent)
+	relative, err := repositoryRelativePath(root, parent)
 	if err != nil {
 		return nil, fmt.Errorf("compare report destination: %w", err)
 	}

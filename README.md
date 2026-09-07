@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sagolubev/secscan/master/install.sh | \
-  sh -s -- --version v0.2.0 --dir "$HOME/.local/bin"
+  sh -s -- --version v0.3.0 --dir "$HOME/.local/bin"
 ```
 
 Если `~/.local/bin` ещё не входит в PATH, добавьте его в текущем терминале:
@@ -43,7 +43,7 @@ secscan --version
 <details>
 <summary>Ручная установка без скрипта</summary>
 
-В [релизе v0.2.0](https://github.com/sagolubev/secscan/releases/tag/v0.2.0)
+В [релизе v0.3.0](https://github.com/sagolubev/secscan/releases/tag/v0.3.0)
 выберите файл для своей системы:
 
 | Система | Процессор | Файл |
@@ -60,7 +60,7 @@ secscan --version
 Для другой системы замените значение `asset` по таблице.
 
 ```sh
-version=v0.2.0
+version=v0.3.0
 asset=secscan-darwin-arm64
 release="https://github.com/sagolubev/secscan/releases/download/$version"
 curl -fL "$release/$asset" -o "$asset"
@@ -89,7 +89,7 @@ secscan --version
 ```
 
 Добавьте строку `export PATH=...` в `~/.zshrc` или `~/.bashrc`, чтобы команда
-была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.2.0`.
+была доступна в новых терминалах. Ожидаемый вывод версии: `secscan v0.3.0`.
 
 `secscan --licenses` показывает лицензию и сведения о сторонних компонентах.
 Оба информационных флага работают без Git-репозитория и Docker.
@@ -260,6 +260,43 @@ jq '{inventory, uncheckedInputs}' /tmp/secscan-report.json
 `NO_COLOR=1` отключает цвет. Полосы показывают прошедшее время, а не процент
 готовности. В маленьком окне вывод переключается на строки событий.
 
+## Сравнение с предыдущим сканом
+
+Сохраните полные находки в новый baseline-файл:
+
+```sh
+secscan --write-baseline /tmp/secscan-baseline.json /path/to/repository
+```
+
+После изменений выполните scan с этим baseline:
+
+```sh
+secscan --baseline /tmp/secscan-baseline.json /path/to/repository > /tmp/secscan-new.json
+```
+
+В `findings` остаются новые находки (`baselineStatus: new`), новые места или
+advisory IDs известных проблем (`expanded`) и все секреты/ошибки (`exempt`).
+Повышение severity также остаётся видимым. Поле `baseline` содержит счётчики
+исходных находок и выходных фрагментов. Одна проблема может дать два фрагмента,
+если одновременно появились новые locations и advisory IDs.
+
+Coverage и inventory сохраняются: пустой список новых находок не доказывает
+полноту анализа. Baseline не сообщает, что исчезнувшая finding исправлена.
+Trivy SBOM и SonarQube exports при этом получают полный результат scan.
+
+Файл baseline можно хранить внутри worktree: выбранный control file исключается
+из scanner inputs и указывается в `inventory.omitted`. Для CI используйте
+baseline из доверенного предыдущего запуска. Изменённый в PR baseline не должен
+сам определять, какие проблемы этого PR считать известными.
+
+`--write-baseline` создаёт новый файл и не перезаписывает существующий.
+Флаги записи и сравнения взаимоисключаются и не работают с `update`.
+При failed scanner запись отклоняется. Ожидаемые skipped/unread inputs остаются
+видны в обычном отчёте; snapshot хранит наблюдавшиеся находки, не аттестацию покрытия.
+Неподдерживаемая schema, fingerprint algorithm или файл больше 32 MiB дают ошибку.
+Для новой версии baseline выберите новое имя файла. Это пользовательское сравнение
+сканов, отдельное от фазового baseline в GRACE-проверках разработки.
+
 ## Что пока ограничено
 
 Python, TypeScript и Semgrep используют один собственный набор из восьми правил.
@@ -272,7 +309,7 @@ Gradle-проверки читают статические координаты
 но не проверяет доступность новых версий. GitLab includes не загружаются.
 Gitleaks проверяет рабочее дерево, а не историю Git.
 
-Пока нет HTML/SARIF-экспорта, baseline-сравнения, пользовательских исключений,
+Пока нет HTML/SARIF-экспорта, пользовательских исключений,
 сканирования выбранных файлов и LLM-анализа. Podman и rootless остаются
 непроверенными режимами. Подробности, оставшиеся требования и сравнение с
 DietSec собраны в [обзоре возможностей](docs/feature-status.md).

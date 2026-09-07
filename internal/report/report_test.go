@@ -132,3 +132,27 @@ func TestImagePackageIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestMarshalPreservesBaselineFragments(t *testing.T) {
+	original := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	first := Finding{Kind: "dependency", Package: &Package{Ecosystem: "npm", Name: "pkg", Version: "1"}, Advisories: []string{"CVE-2026-NEW"}, Locations: []Location{{Path: "a.lock", Line: 1}, {Path: "b.lock", Line: 1}}, Sources: []string{"trivy"}, Fingerprint: original, BaselineStatus: "expanded"}
+	second := first
+	second.Advisories = []string{"CVE-2026-OLD"}
+	second.Locations = []Location{{Path: "b.lock", Line: 1}}
+	data, err := Marshal(Report{Findings: []Finding{first, second}, Baseline: &BaselineSummary{InputFindings: 1, OutputFragments: 2, Expanded: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Report
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Findings) != 2 {
+		t.Fatalf("fragments merged: %s", data)
+	}
+	for _, finding := range got.Findings {
+		if finding.Fingerprint != original || finding.BaselineStatus != "expanded" {
+			t.Errorf("fragment identity changed: %+v", finding)
+		}
+	}
+}

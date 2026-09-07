@@ -51,7 +51,7 @@ func TestSkippedScanIncludesInventory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	result, err := scan(context.Background(), root, []string{"python-sast"}, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: []string{"python-sast"}}, func(progress.Event) {})
 	if err != nil || result.Inventory == nil || result.Inventory.Untracked.Files != 2 || len(result.UncheckedInputs) != 1 {
 		t.Fatalf("skipped inventory=%+v err=%v", result, err)
 	}
@@ -92,7 +92,7 @@ func TestAcceptanceGitleaksUsesSelectedInventory(t *testing.T) {
 	if code := run(context.Background(), []string{"update", "--scanners", "gitleaks", root}, &bytes.Buffer{}, &diagnostics, scan); code != 0 {
 		t.Fatalf("prepare=%d %s", code, &diagnostics)
 	}
-	result, err := scan(context.Background(), root, []string{"gitleaks"}, false, func(progress.Event) {})
+	result, err := scan(context.Background(), root, scanOptions{Scanners: []string{"gitleaks"}}, func(progress.Event) {})
 	if err != nil {
 		t.Fatal(err)
 	}

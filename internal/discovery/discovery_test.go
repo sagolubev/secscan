@@ -320,3 +320,42 @@ func TestTraversalControlFilesAndUnclassifiedInputs(t *testing.T) {
 		t.Fatalf("classification=%+v", got)
 	}
 }
+
+func TestTraversalControlIdentityAndPlannedOutput(t *testing.T) {
+	for _, alias := range []string{"hardlink", "case", "new output"} {
+		t.Run(alias, func(t *testing.T) {
+			root := newGitRepository(t)
+			excluded := "baseline.json"
+			want := []string{"baseline.json"}
+			if alias != "new output" {
+				writeFile(t, root, "baseline.json", "control bytes")
+			}
+			switch alias {
+			case "hardlink":
+				if err := os.Link(filepath.Join(root, "baseline.json"), filepath.Join(root, "alias.json")); err != nil {
+					t.Fatal(err)
+				}
+				want = []string{"alias.json", "baseline.json"}
+			case "case":
+				excluded = "BASELINE.JSON"
+				if _, err := os.Stat(filepath.Join(root, excluded)); os.IsNotExist(err) {
+					t.Skip("case-sensitive filesystem")
+				}
+			}
+			got, err := Discover(root, excluded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var omitted []string
+			for _, item := range got.Traversal.Omitted {
+				if item.Reason != "control_file" {
+					t.Fatalf("omission=%+v", item)
+				}
+				omitted = append(omitted, item.Path)
+			}
+			if len(got.Files) != 0 || got.Traversal.Untracked.Files != 0 || !reflect.DeepEqual(omitted, want) {
+				t.Fatalf("control inventory=%+v files=%v, want omitted=%v", got.Traversal, got.Files, want)
+			}
+		})
+	}
+}
