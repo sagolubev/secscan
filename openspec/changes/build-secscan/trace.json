@@ -3,19 +3,16 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.33",
-  "baselineCommit": "31407fe21e85eb7c5f45e394b66e9db7c4bea4f4",
+  "targetOutcome": "secscan-ij8.26",
+  "baselineCommit": "c0375a5a31a49383fa15105dd1866f96c0b2e681",
   "scope": {
     "implementation": [
-      "internal/tracecheck/staleness.go",
-      "internal/tracecheck/staleness_test.go"
+      "cmd/secscan/main.go",
+      "cmd/secscan/main_test.go"
     ],
     "governance": [
-      "openspec/changes/build-secscan/proposal.md",
-      "openspec/changes/build-secscan/design.md",
-      "openspec/changes/build-secscan/specs/secscan/spec.md",
       "openspec/changes/build-secscan/trace.json",
-      "openspec/changes/build-secscan/.stale.json"
+      "README.md"
     ],
     "evidenceSinks": [
       ".beads/issues.jsonl"
@@ -440,20 +437,23 @@
     {
       "requirement": "LLM analysis",
       "scenario": "Untrusted repository",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.26"
+      "disposition": "target",
+      "components": ["cmd/secscan/main.go"],
+      "tests": ["cmd/secscan/main_test.go"]
     },
     {
       "requirement": "LLM analysis",
       "scenario": "Credential isolation",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.26"
+      "disposition": "target",
+      "components": ["cmd/secscan/main.go"],
+      "tests": ["cmd/secscan/main_test.go"]
     },
     {
       "requirement": "LLM analysis",
       "scenario": "LLM failure",
-      "disposition": "deferred",
-      "issue": "secscan-ij8.26"
+      "disposition": "target",
+      "components": ["cmd/secscan/main.go"],
+      "tests": ["cmd/secscan/main_test.go"]
     },
     {
       "requirement": "Supported environments",
@@ -1552,26 +1552,26 @@
         ]
       },
       {
-        "name": "existing-staleness",
+        "name": "existing-cli",
         "argv": [
           "go",
           "test",
-          "./internal/tracecheck",
+          "./cmd/secscan",
           "-run",
-          "^TestValidateStaleness",
+          "^TestRunWritesOneJSONDocument$",
           "-count=1"
         ]
       }
     ],
     "target": [
       {
-        "name": "v2-staleness",
+        "name": "annotations",
         "argv": [
           "go",
           "test",
-          "./internal/tracecheck",
+          "./cmd/secscan",
           "-run",
-          "^TestValidateStaleness",
+          "^TestAnnotate",
           "-count=1"
         ]
       }

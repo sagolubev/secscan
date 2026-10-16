@@ -14,6 +14,9 @@
 // TestNativeSelectionAndOCIConsent - Require explicit consent for image scanning.
 // TestRunEmitsFailureEvidenceWithoutClaimingSuccess - Retain partial evidence without leaking raw diagnostics.
 // TestAcceptanceCLIContainerScan - Exercise the public CLI through real scanners.
+// TestAnnotate - Keep report data and credentials outside the model request.
+// TestAnnotateRejectsUnsafeInputs - Reject untrusted files and endpoints before network access.
+// TestAnnotateFailure - Return static failures without partial annotations.
 // END_MODULE_MAP
 
 package main
@@ -23,6 +26,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -673,5 +680,162 @@ func assertFailedReport(t *testing.T, data []byte, name string) {
 	}
 	if result.Findings[0].Kind != "error" || result.Findings[0].Message != "scanner failed" {
 		t.Errorf("failure leaked noncanonical result: %#v", result.Findings)
+	}
+}
+
+func TestAnnotate(t *testing.T) {
+	const canary = "SYNTHETIC_SECRET_DO_NOT_SEND"
+	fingerprint := strings.Repeat("a", 64)
+	input := report.Report{SchemaVersion: "1", Repository: "/" + canary, Findings: []report.Finding{{
+		Fingerprint: fingerprint, Kind: "secret", Severity: "high", Path: "/" + canary,
+		Message: canary, RuleID: canary, Sources: []string{canary},
+		Locations: []report.Location{{Path: canary}}, Advisories: []string{canary},
+	}}}
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SECSCAN_LLM_API_KEY", "synthetic-test-key")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requests++
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if request.Method != http.MethodPost || request.Header.Get("Authorization") != "Bearer synthetic-test-key" || request.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("annotate request headers = %s %v, want authenticated JSON POST", request.Method, request.Header)
+		}
+		if bytes.Contains(body, []byte(canary)) || bytes.Contains(body, []byte(fingerprint)) || bytes.Contains(body, []byte("synthetic-test-key")) {
+			t.Errorf("annotate request leaked report text, identifier or key: %s", body)
+		}
+		if bytes.Contains(body, []byte("tools")) || bytes.Contains(body, []byte("tool_choice")) {
+			t.Errorf("annotate request enabled tools: %s", body)
+		}
+		var payload struct {
+			Model    string `json:"model"`
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil || payload.Model != "synthetic" || len(payload.Messages) != 2 {
+			t.Errorf("annotate request format = %s, decode=%v, want model and two messages", body, err)
+		} else if payload.Messages[0].Role != "system" || payload.Messages[1].Role != "user" || requests == 1 && !strings.Contains(payload.Messages[1].Content, `"kindCounts"`) || requests == 2 && !strings.Contains(payload.Messages[1].Content, `"locationCount"`) {
+			t.Errorf("annotate request lacks compatible model/messages or allowlisted counts: %s", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"General guidance"}}]}`)
+	}))
+	defer server.Close()
+	for _, mode := range []struct{ flag, value string }{{"--brief", ""}, {"--explain", fingerprint}} {
+		var stdout, stderr bytes.Buffer
+		args := []string{"annotate", "--report", path, "--llm-url", server.URL + "/v1/chat/completions", "--model", "synthetic"}
+		if mode.value == "" {
+			args = append(args, mode.flag)
+		} else {
+			args = append(args, mode.flag, mode.value)
+		}
+		if code := run(context.Background(), args, &stdout, &stderr, nil); code != 0 || stderr.Len() != 0 {
+			t.Fatalf("run(%s) exit=%d stdout=%q stderr=%q, want success", mode.flag, code, &stdout, &stderr)
+		}
+		var output struct {
+			Annotation string `json:"annotation"`
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &output); err != nil || output.Annotation != "General guidance" || bytes.Count(stdout.Bytes(), []byte("\n")) != 1 {
+			t.Errorf("run(%s) output=%q, decode=%v, want one annotation JSON", mode.flag, &stdout, err)
+		}
+	}
+	if requests != 2 {
+		t.Errorf("run(annotate) requests=%d, want 2", requests)
+	}
+	unchanged, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(unchanged, data) {
+		t.Errorf("run(annotate) report changed: %v", err)
+	}
+}
+
+func TestAnnotateRejectsUnsafeInputs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":"1","findings":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SECSCAN_LLM_API_KEY", "synthetic-test-key")
+	for _, test := range []struct{ name, endpoint, model, key, explain string }{
+		{name: "remote HTTP", endpoint: "http://192.0.2.1/v1/chat/completions", model: "m", key: "present"},
+		{name: "URL credentials", endpoint: "https://user:pass@example.invalid/v1/chat/completions", model: "m", key: "present"},
+		{name: "URL query", endpoint: "https://example.invalid/v1/chat/completions?token=x", model: "m", key: "present"},
+		{name: "URL fragment", endpoint: "https://example.invalid/v1/chat/completions#", model: "m", key: "present"},
+		{name: "incomplete URL", endpoint: "https://example.invalid/", model: "m", key: "present"},
+		{name: "no model", endpoint: "https://example.invalid/v1/chat/completions", key: "present"},
+		{name: "no key", endpoint: "https://example.invalid/v1/chat/completions", model: "m"},
+		{name: "invalid fingerprint", endpoint: "https://example.invalid/v1/chat/completions", model: "m", key: "present", explain: "not-a-sha256"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("SECSCAN_LLM_API_KEY", "")
+			if test.key != "" {
+				t.Setenv("SECSCAN_LLM_API_KEY", "synthetic-test-key")
+			}
+			args := []string{"annotate", "--report", path, "--llm-url", test.endpoint, "--model", test.model}
+			if test.explain != "" {
+				args = append(args, "--explain", test.explain)
+			} else {
+				args = append(args, "--brief")
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run(context.Background(), args, &stdout, &stderr, nil); code != 2 || stdout.Len() != 0 || strings.Contains(stderr.String(), "synthetic-test-key") {
+				t.Errorf("run(%s) exit=%d stdout=%q stderr=%q, want safe usage error", test.name, code, &stdout, &stderr)
+			}
+		})
+	}
+	link := filepath.Join(t.TempDir(), "report-link.json")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"annotate", "--report", link, "--llm-url", "https://example.invalid/v1/chat/completions", "--model", "m", "--brief"}, &stdout, &stderr, nil); code != 1 || stdout.Len() != 0 {
+		t.Errorf("run(symlink report) exit=%d stdout=%q stderr=%q, want rejection", code, &stdout, &stderr)
+	}
+}
+
+func TestAnnotateFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":"1","findings":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SECSCAN_LLM_API_KEY", "synthetic-test-key")
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("Location", "https://example.invalid/collect")
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":""}}]}`)
+	}))
+	defer server.Close()
+	for _, errorResponse := range []string{"redirect", "empty response"} {
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"annotate", "--report", path, "--llm-url", server.URL + "/v1/chat/completions", "--model", "m", "--brief"}, &stdout, &stderr, nil)
+		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "annotation stage failed") || strings.Contains(stderr.String(), "synthetic-test-key") {
+			t.Errorf("run(%s) exit=%d stdout=%q stderr=%q, want isolated failure", errorResponse, code, &stdout, &stderr)
+		}
+	}
+	if requests != 2 {
+		t.Errorf("run(annotate failures) requests=%d, want 2", requests)
+	}
+	for _, content := range []string{`{"choices":[]}`, `{"choices":[{"message":{"content":""}}]}`, `{"choices":[{"message":{"content":"` + strings.Repeat("x", 4097) + `"}}]}`, `{"choices":[{"message":{"content":"ok"}}]} {}`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) { fmt.Fprint(w, content) }))
+		var stdout, stderr bytes.Buffer
+		code := run(context.Background(), []string{"annotate", "--report", path, "--llm-url", server.URL + "/v1/chat/completions", "--model", "m", "--brief"}, &stdout, &stderr, nil)
+		server.Close()
+		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "annotation stage failed") {
+			t.Errorf("run(invalid provider output) exit=%d stdout=%q stderr=%q, want isolated failure", code, &stdout, &stderr)
+		}
 	}
 }

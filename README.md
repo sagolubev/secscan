@@ -587,7 +587,28 @@ Gradle-проверки читают статические координаты
 но не проверяет доступность новых версий. GitLab includes не загружаются.
 Обычный `gitleaks` проверяет рабочее дерево; `gitleaks-history` выбирается отдельно.
 
-LLM-анализ отложен. [Историческое сравнение с DietSec](docs/feature-status.md)
+LLM-аннотации запускаются только отдельно, после сохранения JSON-отчёта:
+
+```sh
+secscan --progress off . > report.json
+SECSCAN_LLM_API_KEY='ключ_клиента' secscan annotate --report report.json \
+  --llm-url https://api.example.com/v1/chat/completions --model model-id --brief
+SECSCAN_LLM_API_KEY='ключ_клиента' secscan annotate --report report.json \
+  --llm-url https://api.example.com/v1/chat/completions --model model-id \
+  --explain SHA256_FINGERPRINT
+```
+
+Клиент сам предоставляет полный URL OpenAI-совместимого Chat Completions API,
+имя модели и ключ в переменной окружения `SECSCAN_LLM_API_KEY`; ключ не передаётся
+через аргументы. URL должен использовать HTTPS (HTTP допускается только для
+literal loopback IP), без credentials, query, fragment и redirects. Во внешний
+API уходят только агрегированные количества и конечные категории kind/severity,
+без путей, сообщений, rule IDs, snippets и secret values. Ответ — отдельный
+JSON с неавторитетной аннотацией; исходный отчёт остаётся неизменным. Ошибка
+провайдера не печатает частичный результат, не запускает повторный запрос и не
+влияет на обычное сканирование. Вызов API может тарифицироваться провайдером.
+
+[Историческое сравнение с DietSec](docs/feature-status.md)
 описывает commit `c406ed3` от 6 сентября 2026 года. Текущие возможности описаны
 выше, актуальный остаток требований и задачи находятся в OpenSpec и Beads.
 
