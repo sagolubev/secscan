@@ -3,11 +3,12 @@
   "change": "build-secscan",
   "spec": "openspec/changes/build-secscan/specs/secscan/spec.md",
   "epic": "secscan-ij8",
-  "targetOutcome": "secscan-ij8.32",
-  "baselineCommit": "c213ef45ef7c2efef1d41ef233a5e5fd38153914",
+  "targetOutcome": "secscan-ij8.33",
+  "baselineCommit": "31407fe21e85eb7c5f45e394b66e9db7c4bea4f4",
   "scope": {
     "implementation": [
-      "README.md"
+      "internal/tracecheck/staleness.go",
+      "internal/tracecheck/staleness_test.go"
     ],
     "governance": [
       "openspec/changes/build-secscan/proposal.md",
@@ -477,6 +478,17 @@
       "tests": [
         "internal/scanner/platform_test.go",
         "cmd/secscan/platform_test.go"
+      ]
+    },
+    {
+      "requirement": "Development traceability",
+      "scenario": "Staleness graph compatibility",
+      "disposition": "target",
+      "components": [
+        "internal/tracecheck/staleness.go"
+      ],
+      "tests": [
+        "internal/tracecheck/staleness_test.go"
       ]
     },
     {
@@ -1540,27 +1552,27 @@
         ]
       },
       {
-        "name": "existing-installer",
+        "name": "existing-staleness",
         "argv": [
-          "python3",
-          ".github/scripts/test-installer.py"
+          "go",
+          "test",
+          "./internal/tracecheck",
+          "-run",
+          "^TestValidateStaleness",
+          "-count=1"
         ]
       }
     ],
     "target": [
       {
-        "name": "installer-syntax",
+        "name": "v2-staleness",
         "argv": [
-          "sh",
-          "-n",
-          "install.sh"
-        ]
-      },
-      {
-        "name": "installer-tests",
-        "argv": [
-          "python3",
-          ".github/scripts/test-installer.py"
+          "go",
+          "test",
+          "./internal/tracecheck",
+          "-run",
+          "^TestValidateStaleness",
+          "-count=1"
         ]
       }
     ],
@@ -1583,26 +1595,19 @@
         ]
       },
       {
-        "name": "installer-syntax",
+        "name": "gofmt",
         "argv": [
-          "sh",
-          "-n",
-          "install.sh"
+          "gofmt",
+          "-d",
+          "."
         ]
       },
       {
-        "name": "installer-tests",
+        "name": "vet",
         "argv": [
-          "python3",
-          ".github/scripts/test-installer.py"
-        ]
-      },
-      {
-        "name": "workflow-lint",
-        "argv": [
-          "actionlint",
-          ".github/workflows/ci.yml",
-          ".github/workflows/release.yml"
+          "go",
+          "vet",
+          "./..."
         ]
       },
       {

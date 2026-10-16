@@ -430,16 +430,20 @@
 - **WHEN** report или source snippets передаются модели
 - **THEN** repository text обрабатывается как untrusted data
 - **AND** project instructions, hooks и tools отключены
+- **AND** аннотация выполняется отдельной opt-in командой только над уже сохранённым JSON report; canonical report и scanner execution не меняются
 
 #### Scenario: Credential isolation
 - **WHEN** finding имеет kind `secret`
 - **THEN** модели передаются только redacted metadata
 - **AND** source snippet не передаётся
+- **AND** пользователь задаёт URL OpenAI-compatible Chat Completions и ключ через environment, без передачи ключа через argv, report или diagnostics
+- **AND** сеть разрешена только к явно заданному HTTPS endpoint (HTTP — только literal loopback), без redirects; свободный текст, paths и snippets из report не отправляются
 
 #### Scenario: LLM failure
 - **WHEN** provider недоступен или возвращает invalid output
 - **THEN** основной report сохраняется без изменений
 - **AND** команда явно сообщает об ошибке annotation stage
+- **AND** нет частичной аннотации в stdout; неуспех даёт exit code 1
 
 ### Requirement: Supported environments
 
@@ -474,6 +478,11 @@
 Репозиторий SHALL поддерживать машинно-проверяемые связи между OpenSpec
 requirements, реализующими components и подтверждающими tests без создания
 второго task tracker или копии текста требований.
+
+#### Scenario: Staleness graph compatibility
+- **WHEN** verifier читает metadata текущего `opsx-stale` v2 `br-flow`
+- **THEN** проверяются точный graph, artifact set, content hashes, зависимости proposal → specs → design и сохранённые upstream hashes
+- **AND** устаревшие, повреждённые или неизвестные поля отклоняются; проверка существующего v1 legacy graph не ослабляется
 
 #### Scenario: Trace links
 - **WHEN** trace verifier проверяет change

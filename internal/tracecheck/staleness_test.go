@@ -1,3 +1,21 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify strict legacy and br-flow staleness graph validation.
+// SCOPE: Synthetic metadata only; no external opsx-stale invocation.
+// DEPENDS: internal/tracecheck/staleness.go
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability, internal/tracecheck/staleness_test.go#TestValidateStalenessV2
+// ROLE: TEST
+// MAP_MODE: LOCALS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// TestValidateStaleness - Reject legacy drift and malformed artifacts.
+// TestValidateStalenessV2 - Reject br-flow graph and upstream digest drift.
+// TestValidateStalenessV2AdditionalMarkdown - Include every Markdown artifact.
+// TestValidateStalenessV1RejectsV2Fields - Keep legacy metadata strict.
+// TestValidateStalenessRejectsMissingAndMalformedState - Reject absent state.
+// staleFixture - Build a synchronized legacy fixture.
+// writeStaleFixture - Store synthetic artifact bytes.
+// END_MODULE_MAP
+
 package tracecheck
 
 import (
@@ -117,5 +135,105 @@ func writeStaleFixture(t *testing.T, root, path string, data []byte) {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateStalenessV2(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "valid"},
+		{name: "unknown graph", mutate: func(state map[string]any) { state["graph"] = "legacy" }},
+		{name: "wrong dependency", mutate: func(state map[string]any) {
+			state["artifacts"].(map[string]any)["design.md"].(map[string]any)["depends_on"] = []string{"proposal.md"}
+		}},
+		{name: "missing upstream metadata", mutate: func(state map[string]any) {
+			delete(state["artifacts"].(map[string]any)["design.md"].(map[string]any), "upstream_sha256")
+		}},
+		{name: "stale upstream hash", mutate: func(state map[string]any) {
+			state["artifacts"].(map[string]any)["specs/secscan/spec.md"].(map[string]any)["upstream_sha256"] = map[string]string{"proposal.md": "stale"}
+		}},
+		{name: "extra upstream hash", mutate: func(state map[string]any) {
+			state["artifacts"].(map[string]any)["specs/secscan/spec.md"].(map[string]any)["upstream_sha256"] = map[string]string{"proposal.md": state["artifacts"].(map[string]any)["proposal.md"].(map[string]any)["sha256"].(string), "extra.md": "stale"}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, state := staleFixture(t)
+			artifacts := state["artifacts"].(map[string]any)
+			state["version"] = 2
+			state["graph"] = "br-flow"
+			artifacts["proposal.md"].(map[string]any)["upstream_sha256"] = map[string]string{}
+			artifacts["specs/secscan/spec.md"].(map[string]any)["depends_on"] = []string{"proposal.md"}
+			artifacts["specs/secscan/spec.md"].(map[string]any)["upstream_sha256"] = map[string]string{"proposal.md": artifacts["proposal.md"].(map[string]any)["sha256"].(string)}
+			artifacts["design.md"].(map[string]any)["depends_on"] = []string{"specs/**"}
+			artifacts["design.md"].(map[string]any)["upstream_sha256"] = map[string]string{"specs/secscan/spec.md": artifacts["specs/secscan/spec.md"].(map[string]any)["sha256"].(string)}
+			if test.mutate != nil {
+				test.mutate(state)
+			}
+			data, err := json.Marshal(state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeStaleFixture(t, root, ".stale.json", data)
+			err = ValidateStaleness(root)
+			if test.mutate == nil && err != nil {
+				t.Errorf("ValidateStaleness(v2 valid) = %v, want nil", err)
+			}
+			if test.mutate != nil && err == nil {
+				t.Errorf("ValidateStaleness(v2 %s) = nil, want rejection", test.name)
+			}
+		})
+	}
+}
+
+func TestValidateStalenessV2AdditionalMarkdown(t *testing.T) {
+	root, state := staleFixture(t)
+	artifacts := state["artifacts"].(map[string]any)
+	state["version"] = 2
+	state["graph"] = "br-flow"
+	artifacts["proposal.md"].(map[string]any)["upstream_sha256"] = map[string]string{}
+	proposalHash := artifacts["proposal.md"].(map[string]any)["sha256"].(string)
+	artifacts["specs/secscan/spec.md"].(map[string]any)["depends_on"] = []string{"proposal.md"}
+	artifacts["specs/secscan/spec.md"].(map[string]any)["upstream_sha256"] = map[string]string{"proposal.md": proposalHash}
+	extra := "specs/secscan/overview.md"
+	content := []byte("extra artifact\n")
+	writeStaleFixture(t, root, extra, content)
+	extraHash := fmt.Sprintf("%x", sha256.Sum256(content))
+	artifacts[extra] = map[string]any{"sha256": extraHash, "synced_at": "2026-09-06T00:00:00Z", "depends_on": []string{"proposal.md"}, "upstream_sha256": map[string]string{"proposal.md": proposalHash}}
+	artifacts["design.md"].(map[string]any)["depends_on"] = []string{"specs/**"}
+	artifacts["design.md"].(map[string]any)["upstream_sha256"] = map[string]string{"specs/secscan/spec.md": artifacts["specs/secscan/spec.md"].(map[string]any)["sha256"].(string), extra: extraHash}
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeStaleFixture(t, root, ".stale.json", data)
+	if err := ValidateStaleness(root); err != nil {
+		t.Errorf("ValidateStaleness(v2 multiple specs) = %v, want nil", err)
+	}
+}
+
+func TestValidateStalenessV1RejectsV2Fields(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "empty graph", mutate: func(state map[string]any) { state["graph"] = "" }},
+		{name: "null upstream", mutate: func(state map[string]any) {
+			state["artifacts"].(map[string]any)["design.md"].(map[string]any)["upstream_sha256"] = nil
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, state := staleFixture(t)
+			test.mutate(state)
+			data, err := json.Marshal(state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeStaleFixture(t, root, ".stale.json", data)
+			if err := ValidateStaleness(root); err == nil {
+				t.Errorf("ValidateStaleness(v1 %s) = nil, want rejection", test.name)
+			}
+		})
 	}
 }

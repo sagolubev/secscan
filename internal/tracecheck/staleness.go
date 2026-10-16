@@ -1,3 +1,15 @@
+// START_MODULE_CONTRACT
+// PURPOSE: Verify recorded artifact hashes and reviewed dependency graph.
+// SCOPE: Accept strict legacy v1 and br-flow v2 metadata without trusting the external tool at CI time.
+// DEPENDS: none
+// LINKS: openspec/changes/build-secscan/specs/secscan/spec.md#requirement-development-traceability, internal/tracecheck/staleness_test.go#TestValidateStalenessV2
+// ROLE: RUNTIME
+// MAP_MODE: EXPORTS
+// END_MODULE_CONTRACT
+// START_MODULE_MAP
+// ValidateStaleness - Reject stale, malformed or mismatched OpenSpec artifacts.
+// END_MODULE_MAP
+
 package tracecheck
 
 import (
@@ -16,14 +28,16 @@ import (
 
 type staleState struct {
 	Version   int                      `json:"version"`
+	Graph     json.RawMessage          `json:"graph"`
 	UpdatedAt time.Time                `json:"updated_at"`
 	Artifacts map[string]staleArtifact `json:"artifacts"`
 }
 
 type staleArtifact struct {
-	SHA256    string    `json:"sha256"`
-	SyncedAt  time.Time `json:"synced_at"`
-	DependsOn []string  `json:"depends_on"`
+	SHA256         string          `json:"sha256"`
+	SyncedAt       time.Time       `json:"synced_at"`
+	DependsOn      []string        `json:"depends_on"`
+	UpstreamSHA256 json.RawMessage `json:"upstream_sha256"`
 }
 
 // ValidateStaleness checks the existing opsx-stale inventory, hashes and
@@ -48,11 +62,16 @@ func ValidateStaleness(dir string) error {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return fmt.Errorf("staleness metadata must contain one JSON document")
 	}
-	if state.Version != 1 || state.UpdatedAt.IsZero() || len(state.Artifacts) == 0 {
-		return fmt.Errorf("staleness metadata requires version 1, updated_at and artifacts")
+	supported := state.Version == 1 && state.Graph == nil
+	if state.Version == 2 {
+		var graph string
+		supported = json.Unmarshal(state.Graph, &graph) == nil && graph == "br-flow"
+	}
+	if state.UpdatedAt.IsZero() || len(state.Artifacts) == 0 || !supported {
+		return fmt.Errorf("staleness metadata requires a supported version, graph, updated_at and artifacts")
 	}
 
-	paths, err := artifactPaths(dir)
+	paths, err := artifactPaths(dir, state.Version)
 	if err != nil {
 		return err
 	}
@@ -67,15 +86,43 @@ func ValidateStaleness(dir string) error {
 		if artifact.SyncedAt.IsZero() || artifact.SyncedAt.After(state.UpdatedAt) {
 			return fmt.Errorf("invalid staleness timestamp for %q", path)
 		}
-		deps := artifactDependencies(path)
+		deps := artifactDependencies(path, state.Version)
 		slices.Sort(artifact.DependsOn)
 		if artifact.DependsOn == nil || !slices.Equal(artifact.DependsOn, deps) {
 			return fmt.Errorf("invalid staleness dependencies for %q", path)
 		}
-		for _, dep := range deps {
-			upstream, ok := state.Artifacts[dep]
-			if !ok || upstream.SyncedAt.After(artifact.SyncedAt) {
-				return fmt.Errorf("stale artifact %q: dependency %q is missing or newer", path, dep)
+		if state.Version == 1 {
+			if artifact.UpstreamSHA256 != nil {
+				return fmt.Errorf("invalid legacy upstream metadata for %q", path)
+			}
+			for _, dep := range deps {
+				upstream, ok := state.Artifacts[dep]
+				if !ok || upstream.SyncedAt.After(artifact.SyncedAt) {
+					return fmt.Errorf("stale artifact %q: dependency %q is missing or newer", path, dep)
+				}
+			}
+		} else {
+			var upstreamPaths []string
+			for _, dep := range deps {
+				if dep == "specs/**" {
+					for _, candidate := range paths {
+						if strings.HasPrefix(candidate, "specs/") {
+							upstreamPaths = append(upstreamPaths, candidate)
+						}
+					}
+				} else {
+					upstreamPaths = append(upstreamPaths, dep)
+				}
+			}
+			var upstreamHashes map[string]string
+			if err := json.Unmarshal(artifact.UpstreamSHA256, &upstreamHashes); err != nil || upstreamHashes == nil || len(upstreamHashes) != len(upstreamPaths) {
+				return fmt.Errorf("invalid upstream metadata for %q", path)
+			}
+			for _, dep := range upstreamPaths {
+				upstream, ok := state.Artifacts[dep]
+				if !ok || upstreamHashes[dep] != upstream.SHA256 {
+					return fmt.Errorf("stale artifact %q: dependency %q hash differs", path, dep)
+				}
 			}
 		}
 		file, err := root.Open(path)
@@ -95,7 +142,7 @@ func ValidateStaleness(dir string) error {
 	return nil
 }
 
-func artifactPaths(dir string) ([]string, error) {
+func artifactPaths(dir string, version int) ([]string, error) {
 	paths := []string{"proposal.md", "design.md"}
 	for _, name := range []string{"failures.md", "decisions.md"} {
 		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
@@ -111,7 +158,7 @@ func artifactPaths(dir string) ([]string, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("artifact symlinks are not allowed: %q", path)
 		}
-		if !entry.IsDir() && entry.Name() == "spec.md" {
+		if !entry.IsDir() && (entry.Name() == "spec.md" || version == 2 && strings.HasSuffix(entry.Name(), ".md")) {
 			relative, err := filepath.Rel(dir, path)
 			if err != nil {
 				return err
@@ -136,7 +183,15 @@ func artifactPaths(dir string) ([]string, error) {
 	return paths, nil
 }
 
-func artifactDependencies(path string) []string {
+func artifactDependencies(path string, version int) []string {
+	if version == 2 {
+		switch {
+		case path == "design.md":
+			return []string{"specs/**"}
+		case strings.HasPrefix(path, "specs/"):
+			return []string{"proposal.md"}
+		}
+	}
 	switch {
 	case path == "design.md":
 		return []string{"proposal.md"}

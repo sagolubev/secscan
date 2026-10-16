@@ -1210,3 +1210,60 @@ target is verified. Delete only the temporary secscan-namespace-validation VM;
 retain the user's default runtime. LLM requirements remain deferred. Rollback
 for a user is installation of the prior explicit release version; do not rewrite
 published tags or replace release assets.
+
+## Opt-in LLM annotations
+
+Outcome .26 is a separate `secscan annotate --report FILE --brief` or
+`--explain FINGERPRINT` command. The user first saves a deterministic schema-v1
+scan report; annotate only reads that bounded regular JSON file and never runs
+scanners, repository hooks, project instructions or model tools. The command
+does not modify the report. Its sole stdout result is JSON containing the
+requested annotation, clearly non-authoritative and separate from scan output.
+Invalid arguments return exit2; provider/response failures return exit1 with a
+static diagnostic and no partial stdout. No automatic uploads or retries.
+
+The user supplies `--llm-url` as the complete OpenAI-compatible
+`/chat/completions` endpoint, `--model` and `SECSCAN_LLM_API_KEY` in the process
+environment. No default endpoint, model or network call exists. Require HTTPS,
+except literal loopback IP over HTTP; reject URL credentials, query and fragment.
+Do not follow redirects with the bearer key. One bounded, timed POST with
+standard-library `net/http` sends `model`, system/user text messages and no
+tools. Bound both response bytes and annotation size; discard raw provider
+errors and response bodies. The key never appears in argv, report or diagnostics.
+
+Only locally derived integer counts and finite, allowlisted kind/severity labels
+cross the model boundary. `brief` receives counts; `explain` selects one valid
+SHA-256 fingerprint locally and receives only that finding's kind/severity and
+counts of locations/advisories. No paths, rule IDs, messages, package names,
+repository text, snippets or free-form metadata are sent, even for non-secret
+findings. The model can offer general guidance, not source-specific analysis;
+the annotation is not evidence that a finding is fixed. JSON escaping prevents
+terminal control bytes in untrusted model text from becoming terminal actions.
+The existing report schema and offline scan behavior remain unchanged.
+
+Focused tests use a synthetic HTTP server and canary strings in a malicious
+report to prove the outgoing allowlist, credential isolation, no redirects,
+invalid input/output handling and report immutability. Run full Go/trace gates
+and independent security review. Rollback omits the annotate command or reverts
+the additive code; saved reports remain readable.
+
+## Tracecheck staleness v2 bootstrap
+
+Outcome .33 repairs the blocking development verifier before .26. Installed
+opsx-stale uses version 2 with `graph=br-flow`, proposal → specs → design and
+per-artifact `upstream_sha256`; tracecheck rejects the new `graph` field and
+hardcodes the old v1 dependencies. Accept both formats with strict field and
+content validation, checking the v2 dependency graph and each recorded upstream
+hash. Do not accept unknown graphs or silently skip missing metadata. Reuse the
+existing Go test fixtures; no second staleness implementation or dependency.
+
+The old verifier cannot capture a successful preimplementation baseline against
+a synchronized v2 graph. User explicitly approved a one-time bootstrap exception
+for .33 only: record the failed baseline before code edits, then TDD, focused
+and full checks, independent review and an attempted `--verify-evidence` with
+the expected missing-chain result. Record all checks and the exception in Beads;
+do not claim a passing GRACE chain for .33 or weaken the verifier to manufacture
+one. Commit the repaired gate after review, then plan .26 anew from that commit
+and require its ordinary successful baseline/target/final chain. Rollback of
+.33 restores the old gate only together with compatible legacy tooling; .26
+must not run on the broken gate.

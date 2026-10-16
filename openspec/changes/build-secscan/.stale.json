@@ -1,25 +1,33 @@
 {
-  "version": 1,
-  "updated_at": "2026-09-07T18:33:08Z",
+  "version": 2,
+  "graph": "br-flow",
+  "updated_at": "2026-10-16T09:30:36Z",
   "artifacts": {
-    "proposal.md": {
-      "sha256": "d7073fe0294f78f9b8c83a38a4af62607c956e54faf2785f20396e9a20ca6ede",
-      "synced_at": "2026-09-07T18:33:08Z",
-      "depends_on": []
-    },
     "design.md": {
-      "sha256": "b79d7c71c01a595600e9e127d717e8e09dbb15db4a92572d8cdacfb9ce54b047",
-      "synced_at": "2026-09-07T18:33:08Z",
+      "sha256": "ac2df46db99b4d537daec6856af73213374cd52e07b60a4de01747111cbefaa5",
+      "synced_at": "2026-10-16T09:30:36Z",
       "depends_on": [
-        "proposal.md"
-      ]
+        "specs/**"
+      ],
+      "upstream_sha256": {
+        "specs/secscan/spec.md": "5a505d173c72f1b104b6a0f3d2ca935593d05db41b7b676d6f2690ea3883b66c"
+      }
+    },
+    "proposal.md": {
+      "sha256": "59182f920be518e606f817a9c486708a7dc2a9c14878fffaca387d62b9fbaada",
+      "synced_at": "2026-10-16T09:30:36Z",
+      "depends_on": [],
+      "upstream_sha256": {}
     },
     "specs/secscan/spec.md": {
-      "sha256": "407ce8a8e08ed80ae94772818c6dba88c65373d7e9c17b261503d50bca4a631d",
-      "synced_at": "2026-09-07T18:33:08Z",
+      "sha256": "5a505d173c72f1b104b6a0f3d2ca935593d05db41b7b676d6f2690ea3883b66c",
+      "synced_at": "2026-10-16T09:30:36Z",
       "depends_on": [
-        "design.md"
-      ]
+        "proposal.md"
+      ],
+      "upstream_sha256": {
+        "proposal.md": "59182f920be518e606f817a9c486708a7dc2a9c14878fffaca387d62b9fbaada"
+      }
     }
   }
 }
